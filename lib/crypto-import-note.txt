@@ -1,0 +1,1 @@
+W pliku lib/foxess.ts zmień linię `import crypto from "crypto";` na `import * as crypto from "crypto";` aby uniknąć błędów runtime.

@@ -1,17 +1,25 @@
-import { headers } from "next/headers";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 import StatTile from "@/components/StatTile";
 import RangeButtons from "@/components/RangeButtons";
 import BarChartCard from "@/components/BarChartCard";
 import HourlyRevenueTable from "@/components/HourlyRevenueTable";
 
-function getBaseUrl() {
-  const h = headers();
-  // prefer forwarded proto/host (Vercel/Proxy friendly)
-  const proto = h.get("x-forwarded-proto") || "https";
-  let host = h.get("host") || process.env.VERCEL_URL || process.env.NEXT_PUBLIC_SITE_URL || "";
-  if (host && !host.startsWith("http")) host = `${proto}://${host}`;
-  if (!host) host = "http://localhost:3000";
-  return host;
+function ensureProtocol(u: string){
+  if (!u) return "";
+  if (u.startsWith("http://") || u.startsWith("https://")) return u;
+  return `https://${u}`;
+}
+function getBaseUrl(){
+  // 1) explicit site URL has priority
+  const site = process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL;
+  if (site) return ensureProtocol(site);
+  // 2) Vercel env
+  const vercel = process.env.VERCEL_URL;
+  if (vercel) return ensureProtocol(vercel);
+  // 3) localhost fallback
+  return "http://localhost:3000";
 }
 
 async function getJSON(path: string){
