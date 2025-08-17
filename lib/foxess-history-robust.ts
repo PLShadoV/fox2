@@ -2,7 +2,7 @@ import crypto from "crypto";
 
 type SepKind = "literal" | "crlf" | "lf";
 type Point = { time?: string; timestamp?: string | number; value?: number };
-type Series = { variable: string; unit: string; values: number[] };
+export type Series = { variable: string; unit: string; values: number[] };
 
 function buildSignature(path: string, token: string, timestamp: number, kind: SepKind) {
   const SEPS: Record<SepKind, string> = { literal: "\\r\\n", crlf: "\r\n", lf: "\n" };
@@ -27,7 +27,8 @@ function toISO(s: any): string | null {
   return t.toISOString();
 }
 
-function groupTo24(points: Point[], unit?: string){
+function groupTo24(points: Point[], unit?: string, cutoffISO?: string){
+  const cutoff = cutoffISO ? new Date(cutoffISO).getTime() : null;
   const buckets: number[] = new Array(24).fill(0);
   const pts = points.map((p: Point) => ({ ...p, iso: toISO(p.time ?? p.timestamp) })).filter(p => (p as any).iso && typeof p.value === "number") as any[];
   pts.sort((a,b)=> a.iso.localeCompare(b.iso));
@@ -35,6 +36,7 @@ function groupTo24(points: Point[], unit?: string){
   for (let i=0;i<pts.length;i++){
     const cur = pts[i];
     const curDate = new Date(cur.iso);
+    if (cutoff && curDate.getTime() > cutoff) break;
     const hour = curDate.getUTCHours();
     const val = Number(cur.value) || 0;
     if (!isFinite(val)) continue;
@@ -43,14 +45,32 @@ function groupTo24(points: Point[], unit?: string){
     } else {
       const next = pts[i+1];
       const nextDate = next ? new Date(next.iso) : new Date(curDate.getTime() + 60*60*1000);
-      const dtHours = Math.max(0, (nextDate.getTime() - curDate.getTime()) / 3600000);
+      const dtEnd = cutoff && nextDate.getTime() > cutoff ? new Date(cutoff) : nextDate;
+      const dtHours = Math.max(0, (dtEnd.getTime() - curDate.getTime()) / 3600000);
       buckets[hour] += val * dtHours;
     }
   }
   return buckets.map(v => +v.toFixed(3));
 }
 
-export async function foxHistoryFetchVar(sn: string, date: string, variable: string): Promise<Series>{
+export function isValidDateStr(s?: string | null){
+  return !!(s && /^\d{4}-\d{2}-\d{2}$/.test(s));
+}
+
+export function todayStrInWarsaw(){
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" }));
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth()+1).padStart(2,"0");
+  const dd = String(now.getDate()).padStart(2,"0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+export function currentHourInWarsaw(){
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" }));
+  return now.getHours();
+}
+
+export async function foxHistoryFetchVar(sn: string, date: string, variable: string, cutoffISO?: string): Promise<Series>{
   const path = "/op/v0/device/history/query";
   const token = process.env.FOXESS_API_KEY || "";
   if (!token) throw new Error("Brak FOXESS_API_KEY");
@@ -58,13 +78,20 @@ export async function foxHistoryFetchVar(sn: string, date: string, variable: str
   const kinds: SepKind[] = ["literal", "crlf", "lf"];
   const d0 = date + " 00:00:00";
   const d1 = date + " 23:59:59";
+  const end = cutoffISO ? new Date(cutoffISO).toISOString().replace("T", " ").slice(0, 19) : d1;
 
   const bodies: any[] = [
-    { sn, variables: [variable], dimension: "HOUR", beginDate: d0, endDate: d1 },
-    { sn, variables: [variable], type: "HOUR", beginDate: d0, endDate: d1 },
-    { sn, variables: [variable], dimension: "HOUR", startDate: d0, endDate: d1 },
-    { sn, variables: [variable], type: "HOUR", startDate: d0, endDate: d1 },
-    { sn, variables: [variable], dimension: "day", beginDate: d0, endDate: d1 }
+    { sn, variables: [variable], dimension: "FIVE_MIN", beginDate: d0, endDate: end },
+    { sn, variables: [variable], type: "FIVE_MIN", beginDate: d0, endDate: end },
+    { sn, variables: [variable], dimension: "5MIN", beginDate: d0, endDate: end },
+    { sn, variables: [variable], type: "5MIN", beginDate: d0, endDate: end },
+    { sn, variables: [variable], dimension: "MIN5", beginDate: d0, endDate: end },
+    { sn, variables: [variable], type: "MIN5", beginDate: d0, endDate: end },
+    { sn, variables: [variable], dimension: "HOUR", beginDate: d0, endDate: end },
+    { sn, variables: [variable], type: "HOUR", beginDate: d0, endDate: end },
+    { sn, variables: [variable], dimension: "HOUR", startDate: d0, endDate: end },
+    { sn, variables: [variable], type: "HOUR", startDate: d0, endDate: end },
+    { sn, variables: [variable], dimension: "day", beginDate: d0, endDate: end }
   ];
 
   for (const kind of kinds) {
@@ -98,8 +125,8 @@ export async function foxHistoryFetchVar(sn: string, date: string, variable: str
         const entry = res[0] as any;
         const unit = String(entry.unit || "");
         const pts: Point[] = (entry.data || entry.points || []) as any[];
-        const values24 = groupTo24(pts, unit);
-        return { variable, unit: "kWh", values: values24 };
+        const values24 = groupTo24(pts, unit, cutoffISO || undefined);
+        return { variable, unit: "KWH", values: values24 };
       }
 
       if (Array.isArray(res) && res.length && Array.isArray(res[0]?.datas)) {
@@ -108,9 +135,9 @@ export async function foxHistoryFetchVar(sn: string, date: string, variable: str
         for (const ds of datas) {
           const unit = String(ds.unit || "");
           const pts: Point[] = (ds.data || ds.points || []) as any[];
-          const values24 = groupTo24(pts, unit);
+          const values24 = groupTo24(pts, unit, cutoffISO || undefined);
           const s = values24.reduce((a:number,b:number)=>a+b,0);
-          if (!best || s > best.values.reduce((x:number,y:number)=>x+y,0)) best = { variable, unit: "kWh", values: values24 };
+          if (!best || s > best.values.reduce((x:number,y:number)=>x+y,0)) best = { variable, unit: "KWH", values: values24 };
         }
         if (best) return best;
       }
@@ -153,12 +180,42 @@ export async function getDayExportAndGenerationKWh(sn: string, date: string){
   const exportSeries = pick(exportResults, ["feedinPower"]);
   const genSeries = pick(genResults, ["generationPower"]);
 
+  return { export: exportSeries, generation: genSeries };
+}
+
+export async function getDayTotals(sn: string, date: string){
+  const today = todayStrInWarsaw();
+  const isToday = date === today;
+  const cutoffISO = isToday ? new Date().toISOString() : undefined;
+
+  // generation
+  const genVarCand = ["generationPower","generation","production","yield","eDay","dayEnergy"];
+  let genSeries: Series | null = null;
+  for (const v of genVarCand) {
+    const s = await foxHistoryFetchVar(sn, date, v, cutoffISO);
+    if (s.values.some(x=>x>0)) { genSeries = s; break; }
+    if (!genSeries) genSeries = s;
+  }
+
+  // export
+  const expVarCand = ["feedinPower","feedin","gridExportEnergy","export","gridOutEnergy","sell","toGrid","eOut"];
+  let expSeries: Series | null = null;
+  for (const v of expVarCand) {
+    const s = await foxHistoryFetchVar(sn, date, v, cutoffISO);
+    if (s.values.some(x=>x>0)) { expSeries = s; break; }
+    if (!expSeries) expSeries = s;
+  }
+
+  const hour = currentHourInWarsaw();
+  const sum = (arr:number[], upto?: number) => Array.isArray(arr) ? arr.slice(0, Math.min(arr.length, upto ?? arr.length)).reduce((x,y)=>x+y,0) : 0;
+  const genTotal = +(sum(genSeries?.values||[])).toFixed(3);
+  const expTotal = +(sum(expSeries?.values||[])).toFixed(3);
+  const genToNow = isToday ? +(sum(genSeries?.values||[], hour).toFixed(3)) : genTotal;
+  const expToNow = isToday ? +(sum(expSeries?.values||[], hour).toFixed(3)) : expTotal;
+
   return {
-    export: exportSeries,
-    generation: genSeries,
-    debug: {
-      triedExport: exportResults.map((s: Series)=>({ name: s.variable, sumKWh: +sum(s.values).toFixed(3) })),
-      triedGeneration: genResults.map((s: Series)=>({ name: s.variable, sumKWh: +sum(s.values).toFixed(3) }))
-    }
+    date,
+    generation: { unit: "kWh", series: genSeries?.values || new Array(24).fill(0), total: genTotal, toNow: genToNow, variable: genSeries?.variable || null },
+    export: { unit: "kWh", series: expSeries?.values || new Array(24).fill(0), total: expTotal, toNow: expToNow, variable: expSeries?.variable || null }
   };
 }
