@@ -135,11 +135,14 @@ export async function foxRealtimeQuery({ sn, variables = ["pvPower","pvPowerW","
       const json = JSON.parse(text);
       if (typeof json?.errno === "number" && json.errno === 0) {
         const result = json.result || [];
+        // Also handle alternative shapes: { datas: [...] } or object map
+        const pool: any[] = Array.isArray(result) ? result : (Array.isArray(result?.datas) ? result.datas : Object.keys(result||{}).map(k => ({ variable: k, value: (result as any)[k] })));
+
         const lower = (s:string)=> (s||'').toLowerCase();
         let val: number | null = null;
-        for (const v of result) {
+        for (const v of pool) {
           const name = lower(v.variable || v.name || "");
-          const isWanted = variables.map(lower).some(w => name.includes(lower(w)));
+          const isWanted = variables.map(lower).some(w => name.includes(w)) || (name.includes('pv') && name.includes('power')) || name==='ppv' || name==='ppvtotal';
           if (!isWanted) continue;
           const candidates = [v.value, v.val, v.power, v.p, Array.isArray(v.values) ? v.values.slice(-1)[0]?.value : undefined];
           for (const c of candidates) {
