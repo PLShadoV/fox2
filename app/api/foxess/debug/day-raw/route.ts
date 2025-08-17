@@ -1,4 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
+
+const PATH = "/op/v0/device/report/query";
+
+function signCRLF(token: string, ts:number){
+  const plain = `${PATH}\r\n${token}\r\n${ts}`;
+  return crypto.createHash("md5").update(plain).digest("hex");
+}
+function signLiteral(token: string, ts:number){
+  const plain = PATH + "\\r\\n" + token + "\\r\\n" + String(ts);
+  return crypto.createHash("md5").update(plain).digest("hex");
+}
 
 export async function GET(req: NextRequest){
   try {
@@ -8,31 +20,47 @@ export async function GET(req: NextRequest){
     const url = new URL(req.url);
     const date = url.searchParams.get("date") || new Date().toISOString().slice(0,10);
     const [y,m,d] = date.split("-").map(Number);
-
-    const path = "/op/v0/device/report/query";
     const ts = Date.now();
 
-    const seps = { literal: "\\r\\n", crlf: "\r\n", lf: "\n" } as const;
-    const tryKinds = ["literal","crlf","lf"] as const;
+    const body = { sn, year: y, month: m, day: d, dimension: "day", variables: ["generation","feedin"] };
 
-    const body = { sn, year: y, month: m, day: d, dimension: "day", variables: ["generation","yield","eDay","dayEnergy","feedin","gridExportEnergy","export","gridOutEnergy","sell","toGrid","eOut"] };
-
-    for (const k of tryKinds) {
-      const plaintext = path + seps[k] + token + seps[k] + String(ts);
-      const sign = (await import("crypto")).createHash("md5").update(plaintext).digest("hex");
-      const headers: Record<string,string> = {
+    // najpierw prawdziwe CRLF
+    let res = await fetch("https://www.foxesscloud.com"+PATH, {
+      method:"POST",
+      headers: {
         "Content-Type": "application/json",
-        "lang": process.env.FOXESS_API_LANG || "pl",
-        "timestamp": String(ts),
         "token": token,
-        "sign": sign,
-        "signature": sign
-      };
-      const resp = await fetch("https://www.foxesscloud.com"+path, { method: "POST", headers, body: JSON.stringify(body), cache: "no-store" });
-      const text = await resp.text();
-      return new NextResponse(text, { status: 200, headers: { "content-type": resp.headers.get("content-type") || "application/json" } });
+        "timestamp": String(ts),
+        "signature": signCRLF(token, ts),
+        "lang": "pl"
+      },
+      body: JSON.stringify(body),
+      cache: "no-store"
+    });
+    let text = await res.text();
+    // fallback: literal \r\n jeśli 40256
+    if (res.ok){
+      try {
+        const j = JSON.parse(text);
+        if (j?.errno === 40256){
+          res = await fetch("https://www.foxesscloud.com"+PATH, {
+            method:"POST",
+            headers: {
+              "Content-Type": "application/json",
+              "token": token,
+              "timestamp": String(ts),
+              "signature": signLiteral(token, ts),
+              "lang": "pl"
+            },
+            body: JSON.stringify(body),
+            cache: "no-store"
+          });
+          text = await res.text();
+        }
+      } catch {}
     }
-    return NextResponse.json({ ok:false, error:"Nie udało się pozyskać" }, { status: 200 });
+
+    return new NextResponse(text, { status: 200, headers: { "content-type": res.headers.get("content-type") || "application/json" }});
   } catch (e:any) {
     return NextResponse.json({ ok:false, error: e.message }, { status: 200 });
   }
