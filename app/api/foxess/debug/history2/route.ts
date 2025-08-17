@@ -8,7 +8,7 @@ export async function GET(req: NextRequest){
     const url = new URL(req.url);
     const date = url.searchParams.get("date") || new Date().toISOString().slice(0,10);
     const res = await getDayExportAndGenerationKWh(sn, date);
-    return NextResponse.json({ ok:true, date, export: res.export, generation: res.generation, debug: res.debug });
+    return NextResponse.json({ ok:true, date, export: res.export, generation: res.generation });
   } catch (e:any) {
     return NextResponse.json({ ok:false, error: e.message }, { status: 200 });
   }
