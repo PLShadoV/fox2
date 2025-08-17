@@ -59,3 +59,27 @@ export async function foxReportQuery({
   }
   return json.result as Array<{ variable: string; unit: string; values: number[] }>;
 }
+
+
+export async function foxPing(){
+  const path = "/op/v0/device/list";
+  const url = FOX_DOMAIN + path;
+  const token = process.env.FOXESS_API_KEY || "";
+  if (!token) throw new Error("Brak FOXESS_API_KEY");
+  const ts = Date.now();
+  const sep = "\n";
+  const plaintext = path + sep + token + sep + String(ts);
+  const signature = crypto.createHash("md5").update(plaintext).digest("hex");
+  const headers: Record<string,string> = {
+    "Content-Type": "application/json",
+    "lang": process.env.FOXESS_API_LANG || "pl",
+    "timestamp": String(ts),
+    "token": token,
+    "sign": signature,
+    "signature": signature
+  };
+  const body = JSON.stringify({ currentPage: 1, pageSize: 1 });
+  const res = await fetch(url, { method: "POST", headers, body, cache: "no-store" });
+  const text = await res.text();
+  return { ok: res.ok, status: res.status, text };
+}
