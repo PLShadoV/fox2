@@ -1,4 +1,3 @@
-
 "use client";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect } from "react";
@@ -28,9 +27,7 @@ export default function RangeControls(){
   };
 
   const today = () => go("day", fmt(new Date()));
-  const yesterday = () => {
-    const d = new Date(); d.setDate(d.getDate()-1); go("day", fmt(d));
-  };
+  const yesterday = () => { const d = new Date(); d.setDate(d.getDate()-1); go("day", fmt(d)); };
   const thisWeek = () => go("week");
   const thisMonth = () => go("month");
   const thisYear = () => go("year");

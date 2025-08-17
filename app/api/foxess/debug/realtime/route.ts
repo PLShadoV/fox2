@@ -1,4 +1,3 @@
-
 import { NextResponse } from "next/server";
 import { foxRealtimeRaw } from "@/lib/foxess";
 

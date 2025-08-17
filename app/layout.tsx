@@ -7,7 +7,7 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: process.env.NEXT_PUBLIC_APP_NAME || "FoxESS + RCE",
-  description: "Oblicz dzienny zarobek z net-billingu na podstawie godzinowych cen RCE i energii oddanej (feedin).",
+  description: "Oblicz zarobek z net-billingu na podstawie godzinowych cen RCE i energii oddanej (feedin).",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -33,7 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </header>
           {children}
           <footer className="mt-10 text-xs muted">
-            Dane: PSE (RCE PLN/MWh) & FoxESS Cloud. Strefa czasowa: {process.env.TZ || "Europe/Warsaw"}.
+            Dane: PSE (RCE PLN/MWh) & FoxESS Cloud.
           </footer>
         </div>
       </body>

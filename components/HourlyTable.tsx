@@ -1,4 +1,3 @@
-
 export default function HourlyTable({ rows }:{ rows: { hour: string; kwh: number; priceMWh: number; revenuePLN: number }[] }){
   const total = rows.reduce((acc, r)=>{
     acc.kwh += r.kwh; acc.revenue += r.revenuePLN; return acc;

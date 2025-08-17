@@ -1,27 +1,32 @@
 # FoxESS + RCE (Vercel-ready)
 
 Nowoczesna aplikacja **Next.js 14** do liczenia zarobku z net-billingu:
-- **FoxESS Open API**: raport dzienny (`/op/v0/device/report/query`) dla `feedin` (kWh/h) + `generation`.
-- **PSE RCE**: `/api/rce-pln` – pole **`rce_pln`** (PLN/MWh), **`udtczas`** (godzina), **`business_date`**.
-- Przychód: `kWh * (RCE/1000)` → **PLN/h**.
+- **FoxESS**: dzienny raport (`/op/v0/device/report/query`) + realtime (`/op/v0/device/real/query`).
+- **PSE RCE**: ceny godzinowe, zagregowane do 24 godzin.
 
-## Szybki start
+## Funkcje
+- KPI: Dzisiejszy zarobek, Oddane (dzień), Śr. cena, Generacja (dzień), Moc teraz (W).
+- Wykresy: PLN/h, kWh/h, Generacja (kWh/h), RCE (PLN/MWh).
+- Zakresy: Dzisiaj, Wczoraj, Tydzień, Miesiąc, Rok + wybór daty.
+- Tabela godzinowa (suma na dole).
+- Negatywne RCE liczone jako 0 do przychodu (ale wyświetlane w tabeli).
+
+## Start
 ```bash
 npm i
 cp .env.example .env   # uzupełnij FOXESS_API_KEY i FOXESS_INVERTER_SN
 npm run dev
 ```
-Otwórz: http://localhost:3000
 
 ## Deploy na Vercel
-1. Wypchnij repo na GitHub.
-2. Importuj w Vercel i ustaw zmienne środowiskowe z `.env`.
+1. Repo na GitHub.
+2. Import do Vercel i ustaw zmienne środowiskowe z `.env` (bez TZ).
 3. Deploy.
 
-## Uwagi
-- Klucz FoxESS przechowuj po stronie serwera (route handlers). Nie udostępniaj na froncie.
-- Strefa czasowa: `Europe/Warsaw`.
-- Kod frontu jest minimalistyczny, ale nowocześnie stylowany (Tailwind + glass cards + gradient).
+## Endpointy debug
+- `/api/foxess/debug/day?date=YYYY-MM-DD`
+- `/api/foxess/debug/realtime`
+- `/api/rce/debug?date=YYYY-MM-DD`
 
 ## Licencja
 MIT

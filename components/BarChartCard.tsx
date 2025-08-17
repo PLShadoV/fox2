@@ -1,4 +1,3 @@
-
 "use client";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
@@ -13,7 +12,7 @@ type Props = {
   data: any[];
   xKey: string;
   yKey: string;
-  name?: string; // <-- optional label for tooltip
+  name?: string;
 };
 
 export default function BarChartCard({ title, data, xKey, yKey, name }: Props) {
