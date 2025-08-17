@@ -110,7 +110,8 @@ export async function foxPing(){
 }
 
 
-export async function foxRealtimeQuery({ sn, variables = ["pvPower", "gridExportPower", "generationPower"] }:{ sn:string; variables?: string[] }){
+
+export async function foxRealtimeQuery({ sn, variables = ["pvPower","pvPowerW","generationPower","gridExportPower","feedinPower"] }:{ sn:string; variables?: string[] }){
   const path = "/op/v0/device/real/query";
   const token = process.env.FOXESS_API_KEY || "";
   if (!token) throw new Error("Brak FOXESS_API_KEY");
@@ -132,9 +133,25 @@ export async function foxRealtimeQuery({ sn, variables = ["pvPower", "gridExport
     const text = await res.text();
     try {
       const json = JSON.parse(text);
-      if (typeof json?.errno === "number" && json.errno === 0) return json.result;
+      if (typeof json?.errno === "number" && json.errno === 0) {
+        const result = json.result || [];
+        const lower = (s:string)=> (s||'').toLowerCase();
+        let val: number | null = null;
+        for (const v of result) {
+          const name = lower(v.variable || v.name || "");
+          const isWanted = variables.map(lower).some(w => name.includes(lower(w)));
+          if (!isWanted) continue;
+          const candidates = [v.value, v.val, v.power, v.p, Array.isArray(v.values) ? v.values.slice(-1)[0]?.value : undefined];
+          for (const c of candidates) {
+            const n = Number(c);
+            if (!Number.isNaN(n) && Number.isFinite(n)) { val = n; break; }
+          }
+          if (val !== null) break;
+        }
+        return { pvNowW: val };
+      }
       if (json?.errno === 40256) continue;
     } catch {}
   }
-  throw new Error("FoxESS realtime: nie udało się pobrać danych (sprawdź uprawnienia / zmienne).");
+  return { pvNowW: null };
 }
