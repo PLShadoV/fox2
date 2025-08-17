@@ -158,3 +158,53 @@ export async function foxRealtimeQuery({ sn, variables = ["pvPower","pvPowerW","
   }
   return { pvNowW: null };
 }
+
+
+export async function foxRealtimeRaw(sn: string, variables: string[]){
+  const path = "/op/v0/device/real/query";
+  const token = process.env.FOXESS_API_KEY || "";
+  if (!token) throw new Error("Brak FOXESS_API_KEY");
+  const ts = Date.now();
+  const kinds: SepKind[] = ["literal", "crlf", "lf"];
+  const body: any = { sn, variables };
+  for (const kind of kinds) {
+    const sign = buildSignature(path, token, ts, kind);
+    const headers: Record<string,string> = {
+      "Content-Type": "application/json",
+      "lang": process.env.FOXESS_API_LANG || "pl",
+      "timestamp": String(ts),
+      "token": token,
+      "sign": sign,
+      "signature": sign
+    };
+    const url = "https://www.foxesscloud.com" + path;
+    const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body), cache: "no-store" });
+    const text = await res.text();
+    try {
+      const json = JSON.parse(text);
+      if (typeof json?.errno === "number" && json.errno === 0) {
+        // try to extract power like in foxRealtimeQuery
+        const result = json.result || [];
+        const lower = (s:string)=> (s||'').toLowerCase();
+        const pool: any[] = Array.isArray(result) ? result : (Array.isArray(result?.datas) ? result.datas : Object.keys(result||{}).map(k => ({ variable: k, value: (result as any)[k] })));
+        let val: number | null = null, matched: string | null = null;
+        const varsLower = variables.map(lower);
+        for (const v of pool) {
+          const name = lower(v.variable || v.name || "");
+          const ok = varsLower.some(w => name.includes(w)) || (name.includes('pv') && name.includes('power')) || name==='ppv' || name==='ppvtotal';
+          if (!ok) continue;
+          const candidates = [v.value, v.val, v.power, v.p, Array.isArray(v.values) ? v.values.slice(-1)[0]?.value : undefined];
+          for (const c of candidates) {
+            const n = Number(c);
+            if (!Number.isNaN(n) && Number.isFinite(n)) { val = n; matched = v.variable || v.name || null; break; }
+          }
+          if (val !== null) break;
+        }
+        return { raw: json.result, pvNowW: val, matchedVar: matched };
+      }
+      if (json?.errno === 40256) continue;
+    } catch {}
+    // if cannot parse JSON, continue to next separator
+  }
+  return { raw: null, pvNowW: null, matchedVar: null };
+}
