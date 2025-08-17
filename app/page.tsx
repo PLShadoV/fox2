@@ -1,10 +1,17 @@
 import BarChartCard from "@/components/BarChartCard";
 import KPICard from "@/components/KPICard";
+import Alert from "@/components/Alert";
 
 async function fetchJSON(url: string) {
-  const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  try {
+    const res = await fetch(url, { cache: "no-store" });
+    const text = await res.text();
+    let data: any;
+    try { data = JSON.parse(text); } catch { data = { raw: text }; }
+    return { ok: res.ok && data?.ok !== false, status: res.status, data };
+  } catch (e: any) {
+    return { ok: false, status: 0, data: { error: String(e) } };
+  }
 }
 
 function toHourLabels(values:number[], date:string){
@@ -15,15 +22,18 @@ export default async function Page(){
   const today = new Date();
   const date = today.toISOString().slice(0,10); // YYYY-MM-DD
 
-  const [fox, rce] = await Promise.all([
+  const [foxRes, rceRes] = await Promise.all([
     fetchJSON(`/api/foxess?date=${date}`),
     fetchJSON(`/api/rce?date=${date}`),
   ]);
 
-  const feedin = fox.result.find((v:any)=>v.variable === "feedin");
-  const generation = fox.result.find((v:any)=>v.variable === "generation");
+  const fox = foxRes.data || {};
+  const rce = rceRes.data || {};
+
+  const feedin = fox.result?.find((v:any)=>v.variable === "feedin");
+  const generation = fox.result?.find((v:any)=>v.variable === "generation");
   const feedinVals: number[] = feedin?.values || []; // kWh per hour
-  const rceRows = rce.rows as Array<{ udtczas: string; rce_pln: number }>;
+  const rceRows = (rce.rows as Array<{ udtczas: string; rce_pln: number }>) || [];
 
   const hourly = toHourLabels(feedinVals, date).map((row, i) => {
     const r = rceRows[i];
@@ -37,8 +47,18 @@ export default async function Page(){
   const totalPLN = hourly.reduce((a,b)=>a+b.pln,0);
   const avgPrice = totalKWh ? totalPLN / totalKWh : 0;
 
+  const hasFoxError = !foxRes.ok || fox?.ok === false;
+  const hasRceError = !rceRes.ok || rce?.ok === false;
+
   return (
     <main className="space-y-6">
+      {(hasFoxError || hasRceError) && (
+        <Alert title="Aplikacja działa, ale brakuje danych">
+          {hasFoxError && <div>FoxESS: {fox?.error || "sprawdź FOXESS_API_KEY i FOXESS_INVERTER_SN w zmiennych środowiskowych."}</div>}
+          {hasRceError && <div>PSE RCE: {rce?.error || "sprawdź dostępność API raporów PSE."}</div>}
+        </Alert>
+      )}
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard label="Dzisiejszy zarobek" value={totalPLN.toFixed(2)} suffix=" PLN" />
         <KPICard label="Oddane (dziś)" value={totalKWh.toFixed(2)} suffix=" kWh" />
