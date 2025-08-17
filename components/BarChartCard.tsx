@@ -6,7 +6,7 @@ export default function BarChartCard({
 }: { title: string; data: any[]; xKey: string; yKey: string; }) {
   return (
     <div className="card p-4">
-      <div className="text-sm font-medium mb-3 opacity-75">{title}</div>
+      <div className="text-base font-medium mb-3">{title}</div>
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data}>
