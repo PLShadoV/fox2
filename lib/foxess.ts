@@ -13,9 +13,13 @@ function kwToW(val:any, unit?:string){
 }
 
 function buildSignature(path: string, token: string, timestamp: number, kind: SepKind) {
-  const sep = kind === "literal" ? "\r\n" : (kind === "crlf" ? "
-" : "
-");
+  // Use a safe lookup (no multiline literals) to avoid bundler parsing issues
+  const SEPS: Record<SepKind, string> = {
+    literal: "\\r\\n", // literal backslash-r backslash-n
+    crlf: "\r\n",      // actual CRLF characters
+    lf: "\n"           // LF
+  };
+  const sep = SEPS[kind];
   const plaintext = path + sep + token + sep + String(timestamp);
   return crypto.createHash("md5").update(plaintext).digest("hex");
 }
