@@ -2,12 +2,23 @@ import Toolbar from "@/components/Toolbar";
 import Kpi from "@/components/Kpi";
 import BarChartCard from "@/components/BarChartCard";
 import { format } from "date-fns";
+import { headers } from "next/headers";
 
 type HourRow = { x: string; hour: number; kwh: number; priceMWh: number; priceShown: number; revenuePLN: number };
 
+function getBaseUrl(){
+  const fromEnv = (process.env.NEXT_PUBLIC_BASE_URL || "").trim();
+  if (fromEnv) return fromEnv.replace(/\/+$/,"");
+  const h = headers();
+  const proto = h.get("x-forwarded-proto") || "https";
+  const host = h.get("x-forwarded-host") || h.get("host") || "localhost:3000";
+  return `${proto}://${host}`;
+}
+
 async function getData(date: string){
-  const foxUrl = `${process.env.NEXT_PUBLIC_BASE_URL || ""}/api/foxess?date=${date}`;
-  const rceUrl = `${process.env.NEXT_PUBLIC_BASE_URL || ""}/api/rce?date=${date}`;
+  const base = getBaseUrl();
+  const foxUrl = `${base}/api/foxess?date=${date}`;
+  const rceUrl = `${base}/api/rce?date=${date}`;
   const [foxRes, rceRes] = await Promise.all([fetch(foxUrl, { cache: "no-store" }), fetch(rceUrl, { cache: "no-store" })]);
   const fox = await foxRes.json();
   const rce = await rceRes.json();
@@ -15,7 +26,8 @@ async function getData(date: string){
 }
 
 async function getRealtime(){
-  const url = `${process.env.NEXT_PUBLIC_BASE_URL || ""}/api/foxess/debug/realtime`;
+  const base = getBaseUrl();
+  const url = `${base}/api/foxess/debug/realtime`;
   try {
     const r = await fetch(url, { cache: "no-store" });
     return await r.json();
