@@ -81,7 +81,6 @@ export async function foxHistoryFetchVar(sn: string, date: string, variable: str
       if (!json || typeof json.errno !== "number" || json.errno !== 0) continue;
       const res = json.result;
 
-      // A) [{ variable, unit, values: number[] }]
       if (Array.isArray(res) && res.length && (Array.isArray(res[0]?.values) || res[0]?.values == null)) {
         const entry = (res[0] || {}) as any;
         const unit = String(entry.unit || "kWh");
@@ -95,7 +94,6 @@ export async function foxHistoryFetchVar(sn: string, date: string, variable: str
         return { variable, unit: u, values: arr };
       }
 
-      // B) [{ variable, unit, data|points: [{time,value}...] }]
       if (Array.isArray(res) && res.length && (res[0]?.data || res[0]?.points)) {
         const entry = res[0] as any;
         const unit = String(entry.unit || "");
@@ -104,7 +102,6 @@ export async function foxHistoryFetchVar(sn: string, date: string, variable: str
         return { variable, unit: "kWh", values: values24 };
       }
 
-      // C) [{ datas: [...] }]
       if (Array.isArray(res) && res.length && Array.isArray(res[0]?.datas)) {
         const datas = (res[0] as any).datas;
         let best: Series | null = null;
@@ -118,7 +115,6 @@ export async function foxHistoryFetchVar(sn: string, date: string, variable: str
         if (best) return best;
       }
 
-      // D) object map
       if (res && typeof res === "object" && !Array.isArray(res)) {
         const maybe = (res as any)[variable];
         if (Array.isArray(maybe)) {
