@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 
 import BarChartCard from "@/components/BarChartCard";
 import KPICard from "@/components/KPICard";
