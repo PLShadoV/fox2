@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { foxReportQuery } from "@/lib/foxess";
 
 type SepKind = "literal" | "crlf" | "lf";
 type Point = { time?: string; timestamp?: string | number; value?: number };
@@ -47,7 +48,7 @@ function groupTo24(points: Point[], unit?: string, cutoffISO?: string){
       const nextDate = next ? new Date(next.iso) : new Date(curDate.getTime() + 60*60*1000);
       const dtEnd = cutoff && nextDate.getTime() > cutoff ? new Date(cutoff) : nextDate;
       const dtHours = Math.max(0, (dtEnd.getTime() - curDate.getTime()) / 3600000);
-      buckets[hour] += val * dtHours;
+      buckets[hour] += val * dtHours / 1000; // W→kWh
     }
   }
   return buckets.map(v => +v.toFixed(3));
@@ -68,6 +69,37 @@ export function todayStrInWarsaw(){
 export function currentHourInWarsaw(){
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" }));
   return now.getHours();
+}
+
+// --- NEW: prefer report/day for energy series ---
+async function fetchDaySeriesPreferReport(sn: string, date: string, candidates: string[]): Promise<Series|null>{
+  try {
+    const [y,m,d] = date.split("-").map(Number);
+    const res = await foxReportQuery({ sn, year: y, month: m, day: d, dimension: "day", variables: candidates });
+    if (Array.isArray(res) && res.length){
+      // pick the first with non-zero sum
+      const pick = (a:any[]) => {
+        let best:any = null;
+        for (const r of a){
+          const vals = Array.isArray(r?.values) ? r.values.map((x:any)=> Number(x)||0) : [];
+          let unit = String(r?.unit || "kWh");
+          const maxv = Math.max(0, ...vals);
+          let v = vals.slice();
+          if (unit.toLowerCase() === "kwh" && maxv > 2000) { v = v.map((x:number)=> x/1000); } // Wh→kWh
+          const arr = new Array(24).fill(0);
+          for (let i=0;i<Math.min(24, v.length); i++) arr[i] = +Number(v[i]).toFixed(3);
+          const sum = arr.reduce((x:number,y:number)=>x+y,0);
+          const item = { variable: String(r.variable||""), unit: "kWh", values: arr };
+          if (sum > 0) return item;
+          if (!best) best = item;
+        }
+        return best;
+      };
+      const found = pick(res);
+      if (found) return found;
+    }
+  } catch {}
+  return null;
 }
 
 export async function foxHistoryFetchVar(sn: string, date: string, variable: string, cutoffISO?: string): Promise<Series>{
@@ -126,7 +158,7 @@ export async function foxHistoryFetchVar(sn: string, date: string, variable: str
         const unit = String(entry.unit || "");
         const pts: Point[] = (entry.data || entry.points || []) as any[];
         const values24 = groupTo24(pts, unit, cutoffISO || undefined);
-        return { variable, unit: "KWH", values: values24 };
+        return { variable, unit: "kWh", values: values24 };
       }
 
       if (Array.isArray(res) && res.length && Array.isArray(res[0]?.datas)) {
@@ -137,7 +169,7 @@ export async function foxHistoryFetchVar(sn: string, date: string, variable: str
           const pts: Point[] = (ds.data || ds.points || []) as any[];
           const values24 = groupTo24(pts, unit, cutoffISO || undefined);
           const s = values24.reduce((a:number,b:number)=>a+b,0);
-          if (!best || s > best.values.reduce((x:number,y:number)=>x+y,0)) best = { variable, unit: "KWH", values: values24 };
+          if (!best || s > best.values.reduce((x:number,y:number)=>x+y,0)) best = { variable, unit: "kWh", values: values24 };
         }
         if (best) return best;
       }
@@ -159,28 +191,16 @@ function sum(a:number[]){ return a.reduce((x,y)=>x+y,0); }
 
 export async function getDayExportAndGenerationKWh(sn: string, date: string){
   const EXPORT_CAND = ["feedinPower","feedin","gridExportEnergy","export","gridOutEnergy","sell","toGrid","eOut"];
-  const GEN_CAND = ["generationPower","generation","production","yield","eDay","dayEnergy"];
+  const GEN_CAND = ["generation","yield","eDay","dayEnergy","generationPower","production"];
 
-  const exportResults: Series[] = [];
-  for (const v of EXPORT_CAND) exportResults.push(await foxHistoryFetchVar(sn, date, v));
-  const genResults: Series[] = [];
-  for (const v of GEN_CAND) genResults.push(await foxHistoryFetchVar(sn, date, v));
+  // Prefer REPORT for both
+  const repGen = await fetchDaySeriesPreferReport(sn, date, GEN_CAND);
+  const repExp = await fetchDaySeriesPreferReport(sn, date, EXPORT_CAND);
 
-  const pick = (arr: Series[], preferPower: string[]) => {
-    const byName = (name:string)=> arr.find(s => s.variable.toLowerCase() === name.toLowerCase() && sum(s.values) > 0);
-    for (const p of preferPower) {
-      const cand = byName(p);
-      if (cand) return cand;
-    }
-    let best = arr[0];
-    for (const s of arr) if (sum(s.values) > sum(best.values)) best = s;
-    return best;
-  };
+  const genSeries = repGen || await foxHistoryFetchVar(sn, date, "generationPower");
+  const expSeries = repExp || await foxHistoryFetchVar(sn, date, "feedinPower");
 
-  const exportSeries = pick(exportResults, ["feedinPower"]);
-  const genSeries = pick(genResults, ["generationPower"]);
-
-  return { export: exportSeries, generation: genSeries };
+  return { export: expSeries, generation: genSeries };
 }
 
 export async function getDayTotals(sn: string, date: string){
@@ -188,30 +208,20 @@ export async function getDayTotals(sn: string, date: string){
   const isToday = date === today;
   const cutoffISO = isToday ? new Date().toISOString() : undefined;
 
-  // generation
-  const genVarCand = ["generationPower","generation","production","yield","eDay","dayEnergy"];
-  let genSeries: Series | null = null;
-  for (const v of genVarCand) {
-    const s = await foxHistoryFetchVar(sn, date, v, cutoffISO);
-    if (s.values.some(x=>x>0)) { genSeries = s; break; }
-    if (!genSeries) genSeries = s;
-  }
+  const GEN_CAND = ["generation","yield","eDay","dayEnergy","generationPower","production"];
+  let genSeries: Series | null = await fetchDaySeriesPreferReport(sn, date, GEN_CAND);
+  if (!genSeries) genSeries = await foxHistoryFetchVar(sn, date, "generationPower", cutoffISO);
 
-  // export
-  const expVarCand = ["feedinPower","feedin","gridExportEnergy","export","gridOutEnergy","sell","toGrid","eOut"];
-  let expSeries: Series | null = null;
-  for (const v of expVarCand) {
-    const s = await foxHistoryFetchVar(sn, date, v, cutoffISO);
-    if (s.values.some(x=>x>0)) { expSeries = s; break; }
-    if (!expSeries) expSeries = s;
-  }
+  const EXP_CAND = ["feedin","gridExportEnergy","export","gridOutEnergy","sell","toGrid","eOut","feedinPower"];
+  let expSeries: Series | null = await fetchDaySeriesPreferReport(sn, date, EXP_CAND);
+  if (!expSeries) expSeries = await foxHistoryFetchVar(sn, date, "feedinPower", cutoffISO);
 
   const hour = currentHourInWarsaw();
-  const sum = (arr:number[], upto?: number) => Array.isArray(arr) ? arr.slice(0, Math.min(arr.length, upto ?? arr.length)).reduce((x,y)=>x+y,0) : 0;
-  const genTotal = +(sum(genSeries?.values||[])).toFixed(3);
-  const expTotal = +(sum(expSeries?.values||[])).toFixed(3);
-  const genToNow = isToday ? +(sum(genSeries?.values||[], hour).toFixed(3)) : genTotal;
-  const expToNow = isToday ? +(sum(expSeries?.values||[], hour).toFixed(3)) : expTotal;
+  const sumTo = (arr:number[], upto?: number) => Array.isArray(arr) ? arr.slice(0, Math.min(arr.length, upto ?? arr.length)).reduce((x,y)=>x+y,0) : 0;
+  const genTotal = +(sumTo(genSeries?.values||[])).toFixed(3);
+  const expTotal = +(sumTo(expSeries?.values||[])).toFixed(3);
+  const genToNow = isToday ? +(sumTo(genSeries?.values||[], hour).toFixed(3)) : genTotal;
+  const expToNow = isToday ? +(sumTo(expSeries?.values||[], hour).toFixed(3)) : expTotal;
 
   return {
     date,

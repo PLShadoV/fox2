@@ -1,42 +1,53 @@
 "use client";
 import { useRouter, useSearchParams } from "next/navigation";
-import { format } from "date-fns";
+import { useMemo } from "react";
 
-const ranges = [
-  { key: "today", label: "Dzisiaj" },
-  { key: "yesterday", label: "Wczoraj" },
-  { key: "week", label: "Ten tydzień" },
-  { key: "month", label: "Ten miesiąc" },
-  { key: "year", label: "Ten rok" }
-];
+function fmt(d: Date){
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,"0");
+  const dd = String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${dd}`;
+}
 
 export default function Toolbar(){
   const router = useRouter();
   const sp = useSearchParams();
-  const date = sp.get("date") || format(new Date(), "yyyy-MM-dd");
+  const date = sp.get("date") || fmt(new Date());
+  const range = sp.get("range") || "day";
 
-  const setRange = (r: string) => {
-    const params = new URLSearchParams(sp);
-    params.set("range", r);
-    if (r==="today") params.set("date", format(new Date(), "yyyy-MM-dd"));
-    router.push("/?"+params.toString());
+  const go = (params: Record<string,string>) => {
+    const usp = new URLSearchParams(sp.toString());
+    Object.entries(params).forEach(([k,v]) => v ? usp.set(k,v) : usp.delete(k));
+    router.push(`/?${usp.toString()}`);
   };
-  const setDate = (d: string) => {
-    const params = new URLSearchParams(sp);
-    params.set("date", d);
-    params.set("range", "day");
-    router.push("/?"+params.toString());
+
+  const onDateChange = (e:any)=> {
+    const v = String(e.target.value || "");
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) go({ date: v, range: "day" });
   };
+
+  const today = useMemo(()=> new Date(), []);
+  const yesterday = useMemo(()=> { const d=new Date(); d.setDate(d.getDate()-1); return d; }, []);
+
+  const setToday = ()=> go({ date: fmt(today), range: "day" });
+  const setYesterday = ()=> go({ date: fmt(yesterday), range: "day" });
+
+  const setWeek = ()=> go({ date, range: "week" });
+  const setMonth = ()=> go({ date, range: "month" });
+  const setYear = ()=> go({ date, range: "year" });
 
   return (
-    <div className="card p-3 flex flex-col md:flex-row gap-3 items-start md:items-center justify-between">
-      <div className="toolbar">
-        {ranges.map(r => (
-          <button key={r.key} className="btn btn-ghost" onClick={()=>setRange(r.key)}>{r.label}</button>
-        ))}
+    <div className="card p-4 flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
+      <div className="flex gap-2 flex-wrap">
+        <button className="btn" onClick={setToday}>Dziś</button>
+        <button className="btn" onClick={setYesterday}>Wczoraj</button>
+        <button className="btn" onClick={setWeek}>Ten tydzień</button>
+        <button className="btn" onClick={setMonth}>Ten miesiąc</button>
+        <button className="btn" onClick={setYear}>Ten rok</button>
       </div>
-      <div className="toolbar">
-        <input type="date" className="border rounded-lg px-3 py-2" value={date} onChange={e=>setDate(e.target.value)} />
+      <div className="flex items-center gap-2">
+        <span className="text-sm opacity-70">Data:</span>
+        <input type="date" value={date} onChange={onDateChange} className="input" />
       </div>
     </div>
   );
