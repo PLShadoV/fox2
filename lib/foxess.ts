@@ -5,7 +5,6 @@ const FOX_DOMAIN = "https://www.foxesscloud.com";
 export type FoxReportDim = "day" | "month" | "year";
 type SepKind = "literal" | "crlf" | "lf";
 
-// --- helpers ---
 function kwToW(val:any, unit?:string){
   const n = Number(val);
   if (!Number.isFinite(n)) return null;
@@ -13,11 +12,10 @@ function kwToW(val:any, unit?:string){
 }
 
 function buildSignature(path: string, token: string, timestamp: number, kind: SepKind) {
-  // Map separators to avoid multiline string issues in bundlers
   const SEPS: Record<SepKind, string> = {
-    literal: "\\r\\n", // literal backslash-r backslash-n (u Ciebie FoxESS tego wymaga)
-    crlf: "\r\n",      // real CRLF
-    lf: "\n"           // LF
+    literal: "\\r\\n",
+    crlf: "\r\n",
+    lf: "\n"
   };
   const sep = SEPS[kind];
   const plaintext = path + sep + token + sep + String(timestamp);
@@ -29,35 +27,22 @@ async function callFox(path: string, headers: Record<string,string>, bodyObj: an
   const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(bodyObj), cache: "no-store" });
   const text = await res.text();
   let json: any = null;
-  try { json = JSON.parse(text); } catch { /* keep text */ }
+  try { json = JSON.parse(text); } catch {}
   return { res, text, json };
 }
 
-// --- report/query (day, month, year) ---
-export async function foxReportQuery({
-  sn,
-  year,
-  month,
-  day,
-  dimension,
-  variables,
-  lang = process.env.FOXESS_API_LANG || "pl",
-}: {
-  sn: string; year: number; month?: number; day?: number;
-  dimension: FoxReportDim; variables: string[]; lang?: string;
-}) {
+export async function foxReportQuery({ sn, year, month, day, dimension, variables, lang = process.env.FOXESS_API_LANG || "pl", }:{
+  sn: string; year: number; month?: number; day?: number; dimension: FoxReportDim; variables: string[]; lang?: string;
+}){
   const path = "/op/v0/device/report/query";
   const token = process.env.FOXESS_API_KEY || "";
-  if (!token) throw new Error("Brak FOXESS_API_KEY (token MD5).");
-
-  const ts = Date.now(); // ms
-  const body: any = { sn, year, dimension, variables };
+  if (!token) throw new Error("Brak FOXESS_API_KEY");
+  const ts = Date.now();
+  const body:any = { sn, year, dimension, variables };
   if (month) body.month = month;
   if (day) body.day = day;
-
   const order: SepKind[] = ["literal", "crlf", "lf"];
   let lastErr: string | null = null;
-
   for (const kind of order) {
     const sign = buildSignature(path, token, ts, kind);
     const headers: Record<string,string> = {
@@ -70,7 +55,6 @@ export async function foxReportQuery({
       "signature": sign
     };
     const { res, json, text } = await callFox(path, headers, body);
-
     if (!res.ok) { lastErr = `FoxESS ${res.status}: ${text}`; break; }
     if (json && typeof json.errno === "number") {
       if (json.errno === 0) return json.result as Array<{ variable: string; unit: string; values: number[] }>;
@@ -82,7 +66,6 @@ export async function foxReportQuery({
   throw new Error(lastErr || "FoxESS: unknown error");
 }
 
-// split to avoid 40257 when too many variables
 export async function foxReportQuerySplit({ sn, date, exportVars, genVars, lang }:{ sn:string; date:string; exportVars:string[]; genVars:string[]; lang?: string; }){
   const [y,m,d] = date.split("-").map(Number);
   let exportPart: any[] = [];
@@ -92,7 +75,6 @@ export async function foxReportQuerySplit({ sn, date, exportVars, genVars, lang 
   return [...exportPart, ...genPart];
 }
 
-// --- realtime ---
 export async function foxRealtimeQuery({ sn, variables = ["pvPower","pv1Power","pv2Power","pvPowerW","generationPower","inverterPower","outputPower","ppv","ppvTotal","gridExportPower","feedinPower","acPower"] }:{ sn:string; variables?: string[] }){
   const path = "/op/v0/device/real/query";
   const token = process.env.FOXESS_API_KEY || "";
@@ -110,7 +92,7 @@ export async function foxRealtimeQuery({ sn, variables = ["pvPower","pv1Power","
       "sign": sign,
       "signature": sign
     };
-    const { res, text } = await callFox(path, headers, body);
+    const { text } = await callFox(path, headers, body);
     try {
       const json = JSON.parse(text);
       if (typeof json?.errno === "number" && json.errno === 0) {
@@ -146,7 +128,6 @@ export async function foxRealtimeQuery({ sn, variables = ["pvPower","pv1Power","
   return { pvNowW: null };
 }
 
-// --- ping device list (and also for separator testing) ---
 export async function foxPing(){
   const path = "/op/v0/device/list";
   const token = process.env.FOXESS_API_KEY || "";
@@ -171,7 +152,6 @@ export async function foxPing(){
   return out;
 }
 
-// --- raw realtime for debug ---
 export async function foxRealtimeRaw(sn: string, variables: string[]){
   const path = "/op/v0/device/real/query";
   const token = process.env.FOXESS_API_KEY || "";
@@ -228,7 +208,6 @@ export async function foxRealtimeRaw(sn: string, variables: string[]){
   return { raw: null, pvNowW: null, matchedVar: null };
 }
 
-// --- devices list utility ---
 export async function foxDevices(){
   const path = "/op/v0/device/list";
   const token = process.env.FOXESS_API_KEY || "";
@@ -253,7 +232,6 @@ export async function foxDevices(){
   return [];
 }
 
-// --- history/query fallback (hourly) ---
 export async function foxHistoryDay({ sn, date, variables }:{ sn:string; date:string; variables: string[] }){
   const path = "/op/v0/device/history/query";
   const token = process.env.FOXESS_API_KEY || "";

@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from "next/server";
 import { foxHistoryDay } from "@/lib/foxess";
 
