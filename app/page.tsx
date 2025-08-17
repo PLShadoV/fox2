@@ -5,7 +5,7 @@ import KPICard from "@/components/KPICard";
 import Alert from "@/components/Alert";
 import RangeControls from "@/components/RangeControls";
 import HourlyTable from "@/components/HourlyTable";
-import { foxReportQuery, foxRealtimeQuery, foxReportQuerySplit } from "@/lib/foxess";
+import { foxReportQuery, foxRealtimeQuery, foxReportQuerySplit, foxHistoryDay } from "@/lib/foxess";
 import { fetchRCEForDate } from "@/lib/pse";
 
 type SearchParams = { [key: string]: string | string[] | undefined };
@@ -38,8 +38,17 @@ async function getDayData(date: string){
     if (!sn || !hasToken) throw new Error("Brak konfiguracji FOXESS (FOXESS_INVERTER_SN lub token).");
     const EXPORT_VARS = ["feedin","feedIn","gridExportEnergy","gridExport","export","exportEnergy","gridOutEnergy","gridOut","sell","sellEnergy","toGrid","toGridEnergy","eOut"];
     const GEN_VARS = ["generation","pvGeneration","production","yield","gen","eDay","dayEnergy"];
-    const result = await foxReportQuerySplit({ sn, date, exportVars: EXPORT_VARS, genVars: GEN_VARS, lang: process.env.FOXESS_API_LANG || "pl" });
-    fox = { result };
+    
+const result = await foxReportQuerySplit({ sn, date, exportVars: EXPORT_VARS, genVars: GEN_VARS, lang: process.env.FOXESS_API_LANG || "pl" });
+let merged = result || [];
+// jeśli pusto, spróbuj przez history/query
+if (!merged.length) {
+  const exp = await foxHistoryDay({ sn, date, variables: EXPORT_VARS });
+  const gen = await foxHistoryDay({ sn, date, variables: GEN_VARS });
+  merged = [...(exp||[]), ...(gen||[])];
+}
+fox = { result: merged };
+
   } catch (e:any) { foxError = String(e?.message || e); }
 
   try { rce = { rows: await fetchRCEForDate(date) }; }
