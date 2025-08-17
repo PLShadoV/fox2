@@ -108,3 +108,33 @@ export async function foxPing(){
   }
   return out;
 }
+
+
+export async function foxRealtimeQuery({ sn, variables = ["pvPower", "gridExportPower", "generationPower"] }:{ sn:string; variables?: string[] }){
+  const path = "/op/v0/device/real/query";
+  const token = process.env.FOXESS_API_KEY || "";
+  if (!token) throw new Error("Brak FOXESS_API_KEY");
+  const ts = Date.now();
+  const kinds: SepKind[] = ["literal", "crlf", "lf"];
+  const body: any = { sn, variables };
+  for (const kind of kinds) {
+    const sign = buildSignature(path, token, ts, kind);
+    const headers: Record<string,string> = {
+      "Content-Type": "application/json",
+      "lang": process.env.FOXESS_API_LANG || "pl",
+      "timestamp": String(ts),
+      "token": token,
+      "sign": sign,
+      "signature": sign
+    };
+    const url = "https://www.foxesscloud.com" + path;
+    const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body), cache: "no-store" });
+    const text = await res.text();
+    try {
+      const json = JSON.parse(text);
+      if (typeof json?.errno === "number" && json.errno === 0) return json.result;
+      if (json?.errno === 40256) continue;
+    } catch {}
+  }
+  throw new Error("FoxESS realtime: nie udało się pobrać danych (sprawdź uprawnienia / zmienne).");
+}
