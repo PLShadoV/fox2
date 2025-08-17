@@ -1,47 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
-import { foxReportQuerySplit, foxHistoryDay } from "@/lib/foxess";
+import { foxReportQuery } from "@/lib/foxess";
 
-const EXPORT_VARS = ["feedin","feedIn","gridExportEnergy","gridExport","export","exportEnergy","gridOutEnergy","gridOut","sell","sellEnergy","toGrid","toGridEnergy","eOut"];
+const EXPORT_VARS = ["feedin","gridExportEnergy","export","gridOutEnergy","sell","toGrid","eOut"];
 const GEN_VARS = ["generation","pvGeneration","production","yield","gen","eDay","dayEnergy"];
 
-export async function GET(req: NextRequest) {
+export async function GET(req: NextRequest){
   try {
     const sn = process.env.FOXESS_INVERTER_SN || "";
     if (!sn) return NextResponse.json({ ok:false, error:"Brak FOXESS_INVERTER_SN" });
     const url = new URL(req.url);
     const date = url.searchParams.get("date") || new Date().toISOString().slice(0,10);
+    const [y,m,d] = date.split("-").map(Number);
 
-    let result:any[] = [];
-    try {
-      result = await foxReportQuerySplit({ sn, date, exportVars: EXPORT_VARS, genVars: GEN_VARS, lang: process.env.FOXESS_API_LANG || "pl" });
-    } catch {}
+    const rep = await foxReportQuery({ sn, year: y, month: m, day: d, dimension: "day", variables: [...EXPORT_VARS, ...GEN_VARS] });
+    const sample = rep.slice(0, 3);
 
-    // Fallback do history/query jeśli pusto
-    if (!result.length) {
-      const exp = await foxHistoryDay({ sn, date, variables: EXPORT_VARS });
-      const gen = await foxHistoryDay({ sn, date, variables: GEN_VARS });
-      result = [...(exp||[]), ...(gen||[])];
-    }
-
-    const lower = (s:string)=> (s||'').toLowerCase();
-    const findVar = (names:string[]) => result.find((v:any) => names.map(lower).includes(lower(v.variable)));
-    const exportVar = findVar(EXPORT_VARS) || null;
-    const genVar = findVar(GEN_VARS) || null;
-    const sample = (v?: number[]) => (v||[]).slice(0,6);
+    // pick matches by non-zero sum
+    const sum = (a:number[])=> a.reduce((x,y)=>x+y,0);
+    const findFirst = (names:string[]) => {
+      for (const n of names){
+        const item = rep.find(r => r.variable.toLowerCase().includes(n.toLowerCase()));
+        if (item && sum(item.values) > 0) return item.variable;
+      }
+      return null;
+    };
 
     return NextResponse.json({
       ok:true,
       date,
-      matched: {
-        export: exportVar?.variable || null,
-        generation: genVar?.variable || null
-      },
-      values: {
-        exportSample: sample(exportVar?.values),
-        generationSample: sample(genVar?.values)
-      },
-      rawCount: result.length,
-      rawVars: result.map((r:any) => r.variable)
+      sample,
+      matched:{
+        export: findFirst(EXPORT_VARS),
+        generation: findFirst(GEN_VARS)
+      }
     });
   } catch (e:any) {
     return NextResponse.json({ ok:false, error: e.message }, { status: 200 });

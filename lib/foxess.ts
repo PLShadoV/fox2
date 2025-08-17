@@ -27,7 +27,7 @@ function normalizeValues(values: any, unit?: string){
   // FoxESS czasem zwraca "kwh" ale liczby wyglądają jak Wh (rzędu 1e6) ⇒ dzielimy przez 1000
   let out = arr.slice();
   let u = String(unit || "kWh");
-  if (u.toLowerCase() === "kwh" && maxv > 20000) { // próg podniesiony, by pewniej wykryć Wh
+  if (u.toLowerCase() === "kwh" && maxv > 20000) {
     out = out.map((v)=> v/1000);
     u = "kWh";
   }
@@ -72,7 +72,7 @@ export async function foxReportQuery({
       if (json.errno === 0) {
         const raw = json.result;
 
-        // --- Parser uniwersalny na kilka kształtów odpowiedzi ---
+        // --- Parser uniwersalny ---
         const out: Array<{ variable: string; unit: string; values: number[] }> = [];
 
         const pushEntry = (label: any, unit: any, values: any) => {
@@ -82,11 +82,9 @@ export async function foxReportQuery({
         };
 
         if (Array.isArray(raw)) {
-          // wariant 1: [{ variable, unit, values }, ...]
           if (raw.length && (Array.isArray(raw[0]?.values) || raw[0]?.values == null)) {
             for (const r of raw) pushEntry((r as any).variable ?? (r as any).name, (r as any).unit, (r as any).values);
           }
-          // wariant 2: [{ datas: [{ name/variable, unit, values }, ...]}, ...]
           else if (raw.length && Array.isArray((raw[0] as any)?.datas)) {
             for (const blk of raw as any[]) {
               for (const ds of (blk?.datas || [])) {
@@ -94,7 +92,6 @@ export async function foxReportQuery({
               }
             }
           }
-          // wariant 3: [{ [var]: values, unit? }, ...]
           else {
             for (const r of raw as any[]) {
               const keys = Object.keys(r||{});
@@ -106,15 +103,12 @@ export async function foxReportQuery({
             }
           }
         } else if (raw && typeof raw === "object") {
-          // wariant 4: { variable1: [..], variable2: [..], unit? }
           for (const [k, v] of Object.entries(raw)) {
             if (Array.isArray(v)) pushEntry(k, (raw as any).unit, v);
           }
         }
 
-        if (out.length) return out;
-        // gdy parser nic nie wyłuskał:
-        return [];
+        return out;
       }
       if (json.errno === 40256) { lastErr = `FoxESS API error 40256 (signature/timestamp)`; continue; }
       if (json.errno === 40257) { lastErr = `FoxESS API error 40257: Parametr nie spełnia oczekiwań`; break; }
@@ -122,6 +116,75 @@ export async function foxReportQuery({
     } else { lastErr = `FoxESS: unexpected response: ${text}`; break; }
   }
   throw new Error(lastErr || "FoxESS: unknown error");
+}
+
+// --- NEW: realtime query ---
+export async function foxRealtimeQuery({ sn, variables }:{ sn: string; variables: string[] }){
+  const path = "/op/v0/device/real/query";
+  const token = process.env.FOXESS_API_KEY || "";
+  if (!token) throw new Error("Brak FOXESS_API_KEY");
+  const ts = Date.now();
+  const kinds: SepKind[] = ["literal", "crlf", "lf"];
+  let lastErr: string | null = null;
+
+  for (const kind of kinds) {
+    const headers: Record<string,string> = {
+      "Content-Type": "application/json",
+      "lang": process.env.FOXESS_API_LANG || "pl",
+      "timestamp": String(ts),
+      "token": token,
+      "sign": buildSignature(path, token, ts, kind),
+      "signature": buildSignature(path, token, ts, kind)
+    };
+    const body = { sn, variables };
+    const { json, text } = await callFox(path, headers, body);
+    if (!json) { lastErr = text; continue; }
+    if (json.errno === 0) {
+      const result = json.result || {};
+      const datas = Array.isArray(result?.datas) ? result.datas : [];
+      const tried = variables.slice();
+      const pref = ["pvPower","pv1Power","pv2Power","pvPowerW","generationPower","inverterPower","outputPower","ppv","ppvTotal","gridExportPower","feedinPower","acPower"];
+      let matched: string | null = null;
+      let pvNowW: number | null = null;
+      for (const p of pref){
+        const ds = datas.find((d:any)=> String(d?.variable||"").toLowerCase() === p.toLowerCase());
+        if (ds && typeof ds.value === "number") {
+          const unit = String(ds.unit || "").toLowerCase();
+          const k = Number(ds.value);
+          pvNowW = unit.includes("kw") ? Math.round(k*1000) : Math.round(k);
+          matched = String(ds.variable || p);
+          break;
+        }
+      }
+      return { ok:true, tried, matched, pvNowW, raw: [result] };
+    }
+    lastErr = `FoxESS API error ${json.errno}: ${json.msg || ""}`;
+  }
+  return { ok:false, error: lastErr || "FoxESS realtime error" };
+}
+
+// --- NEW: device list ---
+export async function foxDevices(){
+  const path = "/op/v0/device/list";
+  const token = process.env.FOXESS_API_KEY || "";
+  if (!token) throw new Error("Brak FOXESS_API_KEY");
+  const ts = Date.now();
+  const kinds: SepKind[] = ["literal", "crlf", "lf"];
+  for (const kind of kinds) {
+    const headers: Record<string,string> = {
+      "Content-Type": "application/json",
+      "lang": process.env.FOXESS_API_LANG || "pl",
+      "timestamp": String(ts),
+      "token": token,
+      "sign": buildSignature(path, token, ts, kind),
+      "signature": buildSignature(path, token, ts, kind)
+    };
+    const body = { currentPage: 1, pageSize: 50 };
+    const { json, text, res } = await callFox(path, headers, body);
+    if (json && json.errno === 0) return { ok:true, ...json.result };
+    if (!res?.ok) return { ok:false, error: text };
+  }
+  return { ok:false, error:"device list error" };
 }
 
 export async function foxPing(){
