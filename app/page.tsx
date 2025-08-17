@@ -47,13 +47,13 @@ async function getDayData(date: string){
   return { fox, rce, foxError, rceError };
 }
 
+
 async function getRealtime(){
   try {
     const sn = process.env.FOXESS_INVERTER_SN || "";
     if (!sn) return { pv: null };
-    const r = await foxRealtimeQuery({ sn, variables: ["pvPower", "gridExportPower", "generationPower"] });
-    const pv = (r?.find?.((x:any)=>x.variable?.toLowerCase?.().includes("pvpower"))?.value) ?? null;
-    return { pv };
+    const r = await foxRealtimeQuery({ sn });
+    return { pv: r?.pvNowW ?? null };
   } catch { return { pv: null }; }
 }
 
@@ -150,12 +150,12 @@ export default async function Page({ searchParams }:{ searchParams: SearchParams
       {view === "day" ? (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <BarChartCard title={`Przychód na godzinę — ${date}`} data={hourly} xKey="x" yKey="revenuePLN" />
-            <BarChartCard title={`Oddanie (kWh) na godzinę — ${date}`} data={hourly} xKey="x" yKey="kwh" />
+            <BarChartCard title={`Przychód na godzinę — ${date}`} data={hourly} xKey="x" yKey="revenuePLN" name="PLN" />
+            <BarChartCard title={`Oddanie (kWh) na godzinę — ${date}`} data={hourly} xKey="x" yKey="kwh" name="kWh" />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <BarChartCard title={`Generacja (kWh) na godzinę — ${date}`} data={hourly} xKey="x" yKey="gen" />
-            <BarChartCard title={`RCE (PLN/MWh) — ${date}`} data={hourly} xKey="x" yKey="priceMWh" />
+            <BarChartCard title={`Generacja (kWh) na godzinę — ${date}`} data={hourly} xKey="x" yKey="gen" name="kWh" />
+            <BarChartCard title={`RCE (PLN/MWh) — ${date}`} data={hourly} xKey="x" yKey="priceMWh" name="PLN/MWh" />
           </div>
           <HourlyTable rows={hourly.map(h=>({ hour: h.hour, kwh: h.kwh, priceMWh: h.priceMWh, revenuePLN: h.revenuePLN }))} />
         </>
