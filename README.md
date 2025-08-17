@@ -1,32 +1,29 @@
-# FoxESS + RCE (Vercel-ready)
+# FoxESS + RCE Dashboard (Next.js 14)
 
-Nowoczesna aplikacja **Next.js 14** do liczenia zarobku z net-billingu:
-- **FoxESS**: dzienny raport (`/op/v0/device/report/query`) + realtime (`/op/v0/device/real/query`).
-- **PSE RCE**: ceny godzinowe, zagregowane do 24 godzin.
+Aplikacja do hostowania na GitHub + Vercel. Łączy dane z **FoxESS Cloud** i **PSE RCE**:
+- kafelki KPI (moc teraz, oddane kWh, dzienny zarobek),
+- wykresy słupkowe (kWh i przychód),
+- tabela godzinowa (kWh, cena, przychód) + suma,
+- debug endpointy.
 
-## Funkcje
-- KPI: Dzisiejszy zarobek, Oddane (dzień), Śr. cena, Generacja (dzień), Moc teraz (W).
-- Wykresy: PLN/h, kWh/h, Generacja (kWh/h), RCE (PLN/MWh).
-- Zakresy: Dzisiaj, Wczoraj, Tydzień, Miesiąc, Rok + wybór daty.
-- Tabela godzinowa (suma na dole).
-- Negatywne RCE liczone jako 0 do przychodu (ale wyświetlane w tabeli).
+## Deploy (Vercel)
+Ustaw w **Environment Variables** (Production):
+- `FOXESS_API_KEY` – token FoxESS (MD5/Cloud)
+- `FOXESS_INVERTER_SN` – numer seryjny falownika
+- `FOXESS_API_LANG` – `pl` (opcjonalne)
+- `PSE_RCE_BASE_URL` – `https://api.raporty.pse.pl/api` (opcjonalne)
+- `NEXT_PUBLIC_APP_NAME` – nazwa appki (opcjonalne)
+- `NEXT_PUBLIC_BASE_URL` – np. `https://twoja-domena.vercel.app` (zalecane)
 
-## Start
-```bash
-npm i
-cp .env.example .env   # uzupełnij FOXESS_API_KEY i FOXESS_INVERTER_SN
-npm run dev
-```
+## Endpoints
+- `/api/foxess?date=YYYY-MM-DD` – zwraca 24 kWh eksportu i generacji (fallback na history/query + integracja *Power*)
+- `/api/rce?date=YYYY-MM-DD` – 24 ceny RCE (PLN/MWh)
+- `/api/foxess/debug/realtime` – bieżąca moc PV (W)
+- `/api/foxess/debug/history2?date=YYYY-MM-DD` – wybrane serie (export/generation) i sumy
 
-## Deploy na Vercel
-1. Repo na GitHub.
-2. Import do Vercel i ustaw zmienne środowiskowe z `.env` (bez TZ).
-3. Deploy.
+## UI
+- Przyciski: Dzisiaj / Wczoraj / Ten tydzień / Ten miesiąc / Ten rok (na razie sterują datą; agregacje tyg/mies/rok do rozbudowy)
+- Wybór daty (date picker).
 
-## Endpointy debug
-- `/api/foxess/debug/day?date=YYYY-MM-DD`
-- `/api/foxess/debug/realtime`
-- `/api/rce/debug?date=YYYY-MM-DD`
-
-## Licencja
-MIT
+## Styl
+- TailwindCSS, nowoczesne karty i wykresy (Recharts).

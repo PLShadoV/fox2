@@ -1,195 +1,102 @@
-export const dynamic = "force-dynamic";
-
+import Toolbar from "@/components/Toolbar";
+import Kpi from "@/components/Kpi";
 import BarChartCard from "@/components/BarChartCard";
-import KPICard from "@/components/KPICard";
-import Alert from "@/components/Alert";
-import RangeControls from "@/components/RangeControls";
-import HourlyTable from "@/components/HourlyTable";
-import { foxReportQuery, foxRealtimeQuery, foxReportQuerySplit, foxHistoryDay } from "@/lib/foxess";
-import { getDayExportAndGenerationKWh } from "@/lib/foxess-history-robust";
-import { fetchRCEForDate } from "@/lib/pse";
+import { format } from "date-fns";
 
-type SearchParams = { [key: string]: string | string[] | undefined };
+type HourRow = { x: string; hour: number; kwh: number; priceMWh: number; priceShown: number; revenuePLN: number };
 
-function parseSP(sp: SearchParams, key: string, def?: string){
-  const v = sp[key]; if (!v) return def;
-  return Array.isArray(v) ? v[0] : v;
-}
-
-function startOfWeek(d: Date){
-  const x = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-  const day = x.getUTCDay() || 7; // Mon=1..Sun=7
-  x.setUTCDate(x.getUTCDate() - (day-1));
-  return x;
-}
-function endOfWeek(d: Date){
-  const s = startOfWeek(d);
-  const e = new Date(s); e.setUTCDate(e.getUTCDate()+6);
-  return e;
-}
-
-function dateISO(d: Date){ return d.toISOString().slice(0,10); }
-
-async function getDayData(date: string){
-  const [y,m,day] = date.split("-").map(Number);
-  let fox:any = null, rce:any = null, foxError:string|undefined, rceError:string|undefined;
-  try {
-    const sn = process.env.FOXESS_INVERTER_SN || "";
-    const hasToken = !!(process.env.FOXESS_API_KEY || process.env.FOXESS_OAUTH_BEARER);
-    if (!sn || !hasToken) throw new Error("Brak konfiguracji FOXESS (FOXESS_INVERTER_SN lub token).");
-    const EXPORT_VARS = ["feedin","feedIn","gridExportEnergy","gridExport","export","exportEnergy","gridOutEnergy","gridOut","sell","sellEnergy","toGrid","toGridEnergy","eOut"];
-    const GEN_VARS = ["generation","pvGeneration","production","yield","gen","eDay","dayEnergy"];
-    
-const result = await foxReportQuerySplit({ sn, date, exportVars: EXPORT_VARS, genVars: GEN_VARS, lang: process.env.FOXESS_API_LANG || "pl" });
-let merged = result || [];
-// jeśli pusto, spróbuj przez history/query
-if (!merged.length) {
-  const exp = await foxHistoryDay({ sn, date, variables: EXPORT_VARS });
-  const gen = await foxHistoryDay({ sn, date, variables: GEN_VARS });
-  merged = [...(exp||[]), ...(gen||[])];
-}
-fox = { result: merged };
-
-  } catch (e:any) { foxError = String(e?.message || e); }
-
-  try { rce = { rows: await fetchRCEForDate(date) }; }
-  catch (e:any) { rceError = String(e?.message || e); }
-
-  return { fox, rce, foxError, rceError };
+async function getData(date: string){
+  const foxUrl = `${process.env.NEXT_PUBLIC_BASE_URL || ""}/api/foxess?date=${date}`;
+  const rceUrl = `${process.env.NEXT_PUBLIC_BASE_URL || ""}/api/rce?date=${date}`;
+  const [foxRes, rceRes] = await Promise.all([fetch(foxUrl, { cache: "no-store" }), fetch(rceUrl, { cache: "no-store" })]);
+  const fox = await foxRes.json();
+  const rce = await rceRes.json();
+  return { fox, rce };
 }
 
 async function getRealtime(){
+  const url = `${process.env.NEXT_PUBLIC_BASE_URL || ""}/api/foxess/debug/realtime`;
   try {
-    const sn = process.env.FOXESS_INVERTER_SN || "";
-    if (!sn) return { pv: null };
-    const r = await foxRealtimeQuery({ sn });
-    return { pv: r?.pvNowW ?? null };
-  } catch { return { pv: null }; }
+    const r = await fetch(url, { cache: "no-store" });
+    return await r.json();
+  } catch { return { ok:false }; }
 }
 
-function pickVarFromResult(result:any[], names: string[]){
-  const lower = (s:string)=> (s||'').toLowerCase();
-  return result.find((v:any)=> names.map(lower).includes(lower(v.variable)));
-}
-
-export default async function Page({ searchParams }:{ searchParams: SearchParams }){
-  const view = parseSP(searchParams, "view", "day")!;
-  const today = new Date();
-  const date = parseSP(searchParams, "date", today.toISOString().slice(0,10))!;
-
+export default async function Page({ searchParams }: { searchParams: { [k:string]: string | string[] | undefined } }){
+  const date = typeof searchParams.date === "string" ? searchParams.date : format(new Date(), "yyyy-MM-dd");
+  const { fox, rce } = await getData(date);
   const realtime = await getRealtime();
 
-  const { fox, rce, foxError, rceError } = await getDayData(date);
+  const exportArr: number[] = fox?.exportKWh || [];
+  const rceRows: any[] = rce?.rows || [];
 
-  const feedin = pickVarFromResult(fox?.result || [], ["feedin","feedIn","gridExportEnergy","gridExport","export","exportEnergy","gridOutEnergy","gridOut","sell","sellEnergy","toGrid","toGridEnergy","eOut"]);
-  const generation = pickVarFromResult(fox?.result || [], ["generation","pvGeneration","production","yield","gen","eDay","dayEnergy"]);
-  let feedinVals: number[] = feedin?.values || [];
-  let genVals: number[] = generation?.values || [];
-  if ((feedinVals.length === 0 || feedinVals.every(v=>!v)) || (genVals.length === 0 || genVals.every(v=>!v))) {
-    try {
-      const robust = await getDayExportAndGenerationKWh(process.env.FOXESS_INVERTER_SN || "", date);
-      if (feedinVals.every(v=>!v)) feedinVals = robust.export.values || [];
-      if (genVals.every(v=>!v)) genVals = robust.generation.values || [];
-    } catch {}
-  }
-  const rceRows = (rce?.rows as Array<{ timeISO: string; rce_pln_mwh: number }>) || [];
-
-  const hourly = Array.from({ length: 24 }).map((_, i) => {
-    const label = `${String(i).padStart(2,'0')}:00`;
-    const kwh = feedinVals[i] || 0;
-    const priceMWh = Number(rceRows[i]?.rce_pln_mwh ?? 0);
-    const effPricePerKWh = Math.max(priceMWh, 0) / 1000; // ujemne ceny liczymy jako 0
-    const revenuePLN = +(kwh * effPricePerKWh).toFixed(2);
-    return { x: label, hour: label, kwh, gen: genVals[i] || 0, priceMWh, revenuePLN };
+  const hourly: HourRow[] = new Array(24).fill(0).map((_,h)=>{
+    const kwh = +(exportArr[h] || 0);
+    const price = Number(rceRows[h]?.rce_pln_mwh || 0);
+    const priceShown = price; // pokazujemy faktyczny (może być ujemny), ale do liczenia użyjemy max(0, price)
+    const priceForCalc = Math.max(0, price);
+    const revenuePLN = +(kwh * (priceForCalc / 1000)).toFixed(2);
+    return { x: String(h).padStart(2, "0")+":00", hour: h, kwh, priceMWh: price, priceShown, revenuePLN };
   });
 
-  const totalKWh = hourly.reduce((a,b)=>a+b.kwh,0);
-  const totalPLN = hourly.reduce((a,b)=>a+b.revenuePLN,0);
-  const avgPrice = totalKWh ? totalPLN / totalKWh : 0;
-
-  let aggBars: { key: string; kwh: number; pln: number }[] = [];
-  if (view !== "day") {
-    let start: Date; let end: Date;
-    const base = new Date(date + "T00:00:00Z");
-    if (view === "week") { start = startOfWeek(base); end = endOfWeek(base); }
-    else if (view === "month") { start = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), 1)); end = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth()+1, 0)); }
-    else { start = new Date(Date.UTC(base.getUTCFullYear(), 0, 1)); end = new Date(Date.UTC(base.getUTCFullYear(), 11, 31)); }
-    const days: string[] = [];
-    const cursor = new Date(start);
-    while (cursor <= end) { days.push(dateISO(cursor)); cursor.setUTCDate(cursor.getUTCDate()+1); }
-
-    const sn = process.env.FOXESS_INVERTER_SN || "";
-    const hasToken = !!(process.env.FOXESS_API_KEY || process.env.FOXESS_OAUTH_BEARER);
-    if (sn && hasToken) {
-      const dayData = await Promise.all(days.map(async dstr => {
-        try {
-          const EXPORT_VARS = ["feedin","feedIn","gridExportEnergy","gridExport","export","exportEnergy","gridOutEnergy","gridOut","sell","sellEnergy","toGrid","toGridEnergy","eOut"];
-          const result = await foxReportQuerySplit({ sn, date: dstr, exportVars: EXPORT_VARS, genVars: [], lang: process.env.FOXESS_API_LANG || "pl" });
-          const exportVar = pickVarFromResult(result, EXPORT_VARS);
-          const kwhArr = (exportVar?.values || []);
-          let pln = 0, kwh = 0;
-          const rcerows = await fetchRCEForDate(dstr);
-          for (let i=0;i<24;i++) {
-            const priceMWh = Number(rcerows[i]?.rce_pln_mwh ?? 0);
-            const eff = Math.max(priceMWh,0)/1000;
-            const v = Number(kwhArr[i] || 0);
-            kwh += v;
-            pln += v * eff;
-          }
-          return { key: dstr.slice(5), kwh: +kwh.toFixed(2), pln: +pln.toFixed(2) };
-        } catch { return { key: dstr.slice(5), kwh: 0, pln: 0 }; }
-      }));
-      aggBars = dayData;
-    }
-  }
-
-  const hasFoxError = !!foxError;
-  const hasRceError = !!rceError;
+  const totalKWh = hourly.reduce((a,b)=> a + b.kwh, 0);
+  const totalRevenue = hourly.reduce((a,b)=> a + b.revenuePLN, 0);
+  const pvNow = realtime?.pvNowW ?? null;
 
   return (
-    <main className="space-y-6">
-      <RangeControls />
+    <div className="space-y-6">
+      <h1 className="text-2xl md:text-3xl font-semibold">FoxESS + RCE — {date}</h1>
+      <Toolbar />
 
-      <div className="card p-3 text-xs">
-        <div className="font-semibold mb-1">Debug</div>
-        <div>Moc teraz (W) → {realtime.pv ?? "—"}</div>
-        <div>Oddane zmienna → {feedin?.variable ?? "—"}</div>
-        <div>Generacja zmienna → {generation?.variable ?? "—"}</div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Kpi title="Moc teraz" value={pvNow!=null ? (pvNow/1000).toFixed(2) : "-"} unit="kW" />
+        <Kpi title="Oddane (ten dzień)" value={totalKWh.toFixed(2)} unit="kWh" />
+        <Kpi title="Dzisiejszy zarobek" value={totalRevenue.toFixed(2)} unit="PLN" />
       </div>
 
-      {(hasFoxError || hasRceError) && (
-        <Alert title="Aplikacja działa, ale brakuje danych">
-          {hasFoxError && <div>FoxESS: {foxError}</div>}
-          {hasRceError && <div>PSE RCE: {rceError}</div>}
-        </Alert>
-      )}
-
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        <KPICard label="Dzisiejszy zarobek" value={totalPLN.toFixed(2)} suffix=" PLN" />
-        <KPICard label="Oddane (ten dzień)" value={totalKWh.toFixed(2)} suffix=" kWh" />
-        <KPICard label="Śr. cena (dzień)" value={avgPrice.toFixed(2)} suffix=" PLN/kWh" />
-        <KPICard label="Generacja (dzień)" value={(hourly.reduce((a,b)=>a+b.gen,0)).toFixed(2)} suffix=" kWh" />
-        <KPICard label="Moc teraz" value={realtime.pv!==null ? Number(realtime.pv).toFixed(0) : "—"} suffix={realtime.pv!==null ? " W" : ""} />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <BarChartCard title={`Przychód na godzinę — ${date}`} data={hourly} xKey="x" yKey="revenuePLN" />
+        <BarChartCard title={`Oddanie (kWh) na godzinę — ${date}`} data={hourly} xKey="x" yKey="kwh" />
       </div>
 
-      {view === "day" ? (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <BarChartCard title={`Przychód na godzinę — ${date}`} data={hourly} xKey="x" yKey="revenuePLN" name="PLN" />
-            <BarChartCard title={`Oddanie (kWh) na godzinę — ${date}`} data={hourly} xKey="x" yKey="kwh" name="kWh" />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <BarChartCard title={`Generacja (kWh) na godzinę — ${date}`} data={hourly} xKey="x" yKey="gen" name="kWh" />
-            <BarChartCard title={`RCE (PLN/MWh) — ${date}`} data={hourly} xKey="x" yKey="priceMWh" name="PLN/MWh" />
-          </div>
-          <HourlyTable rows={hourly.map(h=>({ hour: h.hour, kwh: h.kwh, priceMWh: h.priceMWh, revenuePLN: h.revenuePLN }))} />
-        </>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <BarChartCard title={`Przychód — ${view}`} data={aggBars} xKey="key" yKey="pln" name="PLN" />
-          <BarChartCard title={`Oddanie (kWh) — ${view}`} data={aggBars} xKey="key" yKey="kwh" name="kWh" />
+      <div className="card p-4">
+        <div className="font-semibold mb-3">Tabela — produkcja/eksport, ceny RCE, przychód</div>
+        <div className="overflow-x-auto">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Godzina</th>
+                <th>Oddane [kWh]</th>
+                <th>Cena RCE [PLN/MWh]</th>
+                <th>Do obliczeń [PLN/MWh]</th>
+                <th>Przychód [PLN]</th>
+              </tr>
+            </thead>
+            <tbody>
+              {hourly.map((r, i) => (
+                <tr key={i} className="border-b last:border-b-0">
+                  <td>{r.x}</td>
+                  <td>{r.kwh.toFixed(3)}</td>
+                  <td>{r.priceShown.toFixed(2)}</td>
+                  <td>{Math.max(0, r.priceMWh).toFixed(2)}</td>
+                  <td>{r.revenuePLN.toFixed(2)}</td>
+                </tr>
+              ))}
+              <tr className="font-semibold">
+                <td>Suma</td>
+                <td>{totalKWh.toFixed(3)}</td>
+                <td>—</td>
+                <td>—</td>
+                <td>{totalRevenue.toFixed(2)}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-      )}
-    </main>
+      </div>
+
+      <div className="text-xs text-slate-500">
+        Uwaga: ceny RCE ujemne są pokazywane w tabeli, ale do obliczeń przyjmujemy 0 (zgodnie z wymaganiem).
+      </div>
+    </div>
   );
 }

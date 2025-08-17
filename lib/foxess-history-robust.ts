@@ -1,7 +1,5 @@
 import crypto from "crypto";
 
-const FOX_DOMAIN = "https://www.foxesscloud.com";
-
 type SepKind = "literal" | "crlf" | "lf";
 type Point = { time?: string; timestamp?: string | number; value?: number };
 type Series = { variable: string; unit: string; values: number[] };
@@ -14,7 +12,7 @@ function buildSignature(path: string, token: string, timestamp: number, kind: Se
 }
 
 async function callFox(path: string, headers: Record<string,string>, bodyObj: any) {
-  const url = FOX_DOMAIN + path;
+  const url = "https://www.foxesscloud.com" + path;
   const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(bodyObj), cache: "no-store" });
   const text = await res.text();
   let json: any = null;
@@ -31,7 +29,7 @@ function toISO(s: any): string | null {
 
 function groupTo24(points: Point[], unit?: string){
   const buckets: number[] = new Array(24).fill(0);
-  const pts = points.map(p => ({ ...p, iso: toISO(p.time ?? p.timestamp) })).filter(p => p.iso && typeof p.value === "number") as any[];
+  const pts = points.map((p: Point) => ({ ...p, iso: toISO(p.time ?? p.timestamp) })).filter(p => (p as any).iso && typeof p.value === "number") as any[];
   pts.sort((a,b)=> a.iso.localeCompare(b.iso));
   if (!pts.length) return buckets;
   for (let i=0;i<pts.length;i++){
@@ -66,7 +64,7 @@ export async function foxHistoryFetchVar(sn: string, date: string, variable: str
     { sn, variables: [variable], type: "HOUR", beginDate: d0, endDate: d1 },
     { sn, variables: [variable], dimension: "HOUR", startDate: d0, endDate: d1 },
     { sn, variables: [variable], type: "HOUR", startDate: d0, endDate: d1 },
-    { sn, variables: [variable], dimension: "day", beginDate: d0, endDate: d1 },
+    { sn, variables: [variable], dimension: "day", beginDate: d0, endDate: d1 }
   ];
 
   for (const kind of kinds) {
@@ -85,14 +83,13 @@ export async function foxHistoryFetchVar(sn: string, date: string, variable: str
 
       // A) [{ variable, unit, values: number[] }]
       if (Array.isArray(res) && res.length && (Array.isArray(res[0]?.values) || res[0]?.values == null)) {
-        const entry = res[0] || {};
+        const entry = (res[0] || {}) as any;
         const unit = String(entry.unit || "kWh");
-        const values = Array.isArray(entry.values) ? entry.values.map((x:any)=> Number(x)||0) : new Array(24).fill(0);
-        // If absurdly large (e.g. Wh reported as kWh), scale down
+        const values = Array.isArray(entry.values) ? (entry.values as any[]).map((x:any)=> Number(x)||0) : new Array(24).fill(0);
         const maxv = Math.max(...values);
-        let vals = values.slice();
+        let vals: number[] = values.slice() as number[];
         let u = unit;
-        if (maxv > 2000) { vals = vals.map(v=> v/1000); u = "kWh"; }
+        if (maxv > 2000) { vals = vals.map((v: number)=> v/1000); u = "kWh"; }
         const arr = new Array(24).fill(0);
         for (let i=0;i<Math.min(24, vals.length); i++) arr[i] = +Number(vals[i]).toFixed(3);
         return { variable, unit: u, values: arr };
@@ -100,7 +97,7 @@ export async function foxHistoryFetchVar(sn: string, date: string, variable: str
 
       // B) [{ variable, unit, data|points: [{time,value}...] }]
       if (Array.isArray(res) && res.length && (res[0]?.data || res[0]?.points)) {
-        const entry = res[0];
+        const entry = res[0] as any;
         const unit = String(entry.unit || "");
         const pts: Point[] = (entry.data || entry.points || []) as any[];
         const values24 = groupTo24(pts, unit);
@@ -109,15 +106,14 @@ export async function foxHistoryFetchVar(sn: string, date: string, variable: str
 
       // C) [{ datas: [...] }]
       if (Array.isArray(res) && res.length && Array.isArray(res[0]?.datas)) {
-        const datas = res[0].datas;
-        // pick dataset with highest area after integration
+        const datas = (res[0] as any).datas;
         let best: Series | null = null;
         for (const ds of datas) {
           const unit = String(ds.unit || "");
           const pts: Point[] = (ds.data || ds.points || []) as any[];
           const values24 = groupTo24(pts, unit);
-          const s = values24.reduce((a,b)=>a+b,0);
-          if (!best || s > best.values.reduce((a,b)=>a+b,0)) best = { variable, unit: "kWh", values: values24 };
+          const s = values24.reduce((a:number,b:number)=>a+b,0);
+          if (!best || s > best.values.reduce((x:number,y:number)=>x+y,0)) best = { variable, unit: "kWh", values: values24 };
         }
         if (best) return best;
       }
@@ -147,14 +143,12 @@ export async function getDayExportAndGenerationKWh(sn: string, date: string){
   const genResults: Series[] = [];
   for (const v of GEN_CAND) genResults.push(await foxHistoryFetchVar(sn, date, v));
 
-  // Prefer *Power-based (already integrated) if non-zero; else best non-zero energy series
   const pick = (arr: Series[], preferPower: string[]) => {
     const byName = (name:string)=> arr.find(s => s.variable.toLowerCase() === name.toLowerCase() && sum(s.values) > 0);
     for (const p of preferPower) {
       const cand = byName(p);
       if (cand) return cand;
     }
-    // else fallback to the one with max sum
     let best = arr[0];
     for (const s of arr) if (sum(s.values) > sum(best.values)) best = s;
     return best;
@@ -167,8 +161,8 @@ export async function getDayExportAndGenerationKWh(sn: string, date: string){
     export: exportSeries,
     generation: genSeries,
     debug: {
-      triedExport: exportResults.map(s=>({ name: s.variable, sumKWh: +sum(s.values).toFixed(3) })),
-      triedGeneration: genResults.map(s=>({ name: s.variable, sumKWh: +sum(s.values).toFixed(3) }))
+      triedExport: exportResults.map((s: Series)=>({ name: s.variable, sumKWh: +sum(s.values).toFixed(3) })),
+      triedGeneration: genResults.map((s: Series)=>({ name: s.variable, sumKWh: +sum(s.values).toFixed(3) }))
     }
   };
 }

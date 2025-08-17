@@ -1,33 +1,18 @@
 "use client";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Bar, ResponsiveContainer } from "recharts";
 
-function formatVal(v: any){
-  const n = Number(v);
-  if (Number.isFinite(n)) return n % 1 === 0 ? n.toString() : n.toFixed(2);
-  return String(v ?? "");
-}
-
-type Props = {
-  title: string;
-  data: any[];
-  xKey: string;
-  yKey: string;
-  name?: string;
-};
-
-export default function BarChartCard({ title, data, xKey, yKey, name }: Props) {
+export default function BarChartCard({ title, data, xKey, yKey }:{ title: string; data: any[]; xKey: string; yKey: string; }) {
   return (
     <div className="card p-4">
-      <div className="text-base font-medium mb-3">{title}</div>
-      <div className="h-64">
-        <ResponsiveContainer width="100%" height="100%">
+      <div className="font-semibold mb-3">{title}</div>
+      <div style={{ width: "100%", height: 320 }}>
+        <ResponsiveContainer>
           <BarChart data={data}>
-            <XAxis dataKey={xKey} tick={{ fontSize: 12 }} />
-            <YAxis tick={{ fontSize: 12 }} />
-            <Tooltip
-              formatter={(value) => [formatVal(value), name || yKey]}
-              labelFormatter={(label) => String(label)}
-            />
+            <CartesianGrid vertical={false} strokeDasharray="3 3" />
+            <XAxis dataKey={xKey} />
+            <YAxis />
+            <Tooltip />
+            <Legend />
             <Bar dataKey={yKey} />
           </BarChart>
         </ResponsiveContainer>

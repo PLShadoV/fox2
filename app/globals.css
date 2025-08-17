@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root{ color-scheme: light; }
+html, body { height: 100%; }
+body { @apply bg-slate-50 text-slate-900; }
+.card { @apply bg-white rounded-2xl shadow-sm border border-slate-100; }
+.kpi { @apply p-5 md:p-6; }
+.kpi-title { @apply text-sm text-slate-500; }
+.kpi-value { @apply text-2xl md:text-3xl font-semibold mt-1; }
+.btn { @apply inline-flex items-center justify-center rounded-xl border px-3 py-2 text-sm font-medium; }
+.btn-ghost { @apply border-slate-200 hover:bg-slate-100; }
+.btn-primary { @apply bg-brand-600 text-white border-brand-600 hover:bg-brand-700; }
+.toolbar { @apply flex flex-wrap gap-2 items-center; }
+.table { @apply w-full text-sm; }
+.table th { @apply text-left text-slate-500 font-medium pb-2; }
+.table td { @apply py-2; }
