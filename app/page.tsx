@@ -6,6 +6,7 @@ import Alert from "@/components/Alert";
 import RangeControls from "@/components/RangeControls";
 import HourlyTable from "@/components/HourlyTable";
 import { foxReportQuery, foxRealtimeQuery, foxReportQuerySplit, foxHistoryDay } from "@/lib/foxess";
+import { getDayExportAndGenerationKWh } from "@/lib/foxess-history-robust";
 import { fetchRCEForDate } from "@/lib/pse";
 
 type SearchParams = { [key: string]: string | string[] | undefined };
@@ -82,8 +83,15 @@ export default async function Page({ searchParams }:{ searchParams: SearchParams
 
   const feedin = pickVarFromResult(fox?.result || [], ["feedin","feedIn","gridExportEnergy","gridExport","export","exportEnergy","gridOutEnergy","gridOut","sell","sellEnergy","toGrid","toGridEnergy","eOut"]);
   const generation = pickVarFromResult(fox?.result || [], ["generation","pvGeneration","production","yield","gen","eDay","dayEnergy"]);
-  const feedinVals: number[] = feedin?.values || [];
-  const genVals: number[] = generation?.values || [];
+  let feedinVals: number[] = feedin?.values || [];
+  let genVals: number[] = generation?.values || [];
+  if ((feedinVals.length === 0 || feedinVals.every(v=>!v)) || (genVals.length === 0 || genVals.every(v=>!v))) {
+    try {
+      const robust = await getDayExportAndGenerationKWh(process.env.FOXESS_INVERTER_SN || "", date);
+      if (feedinVals.every(v=>!v)) feedinVals = robust.export.values || [];
+      if (genVals.every(v=>!v)) genVals = robust.generation.values || [];
+    } catch {}
+  }
   const rceRows = (rce?.rows as Array<{ timeISO: string; rce_pln_mwh: number }>) || [];
 
   const hourly = Array.from({ length: 24 }).map((_, i) => {
