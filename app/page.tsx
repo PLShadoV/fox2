@@ -1,27 +1,39 @@
+import { headers } from "next/headers";
 import StatTile from "@/components/StatTile";
 import RangeButtons from "@/components/RangeButtons";
 import BarChartCard from "@/components/BarChartCard";
 import HourlyRevenueTable from "@/components/HourlyRevenueTable";
 
-async function getJSON(url: string){
+function getBaseUrl() {
+  const h = headers();
+  // prefer forwarded proto/host (Vercel/Proxy friendly)
+  const proto = h.get("x-forwarded-proto") || "https";
+  let host = h.get("host") || process.env.VERCEL_URL || process.env.NEXT_PUBLIC_SITE_URL || "";
+  if (host && !host.startsWith("http")) host = `${proto}://${host}`;
+  if (!host) host = "http://localhost:3000";
+  return host;
+}
+
+async function getJSON(path: string){
+  const base = getBaseUrl();
+  const url = path.startsWith("http") ? path : `${base}${path}`;
   const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) throw new Error(`Fetch ${url} failed`);
+  if (!res.ok) throw new Error(`Fetch ${url} failed: ${res.status}`);
   return res.json();
 }
 
 export default async function Page({ searchParams }: { searchParams: { date?: string } }) {
   const date = searchParams?.date || new Date().toISOString().slice(0,10);
 
-  // Realtime power (u Ciebie już działa)
-  const pvJSON = await getJSON(`${process.env.NEXT_PUBLIC_BASE_URL ?? ""}/api/foxess/realtime`)
-    .catch(()=> ({ pvNowW: null }));
+  // Realtime power
+  const pvJSON = await getJSON(`/api/foxess/realtime`).catch(()=> ({ pvNowW: null }));
 
-  // Generation day summary (wygenerowano)
-  const dayJSON = await getJSON(`${process.env.NEXT_PUBLIC_BASE_URL ?? ""}/api/foxess/summary/day?date=${date}`)
+  // Generation day summary
+  const dayJSON = await getJSON(`/api/foxess/summary/day?date=${date}`)
     .catch(()=> ({ today:{ generation:{ total: null }}}));
 
-  // Revenue calculated from GENERATION
-  const revJSON = await getJSON(`${process.env.NEXT_PUBLIC_BASE_URL ?? ""}/api/revenue/day?date=${date}`)
+  // Revenue from GENERATION
+  const revJSON = await getJSON(`/api/revenue/day?date=${date}`)
     .catch(()=> ({ totals:{ revenue_pln: null }, rows: [] }));
 
   const hourly = (revJSON?.rows || []).map((r:any)=> ({ x: String(r.hour).padStart(2,"0")+":00", revenue: r.revenue_pln }));
@@ -41,7 +53,6 @@ export default async function Page({ searchParams }: { searchParams: { date?: st
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <BarChartCard title={`Przychód na godzinę — ${date}`} data={hourly} xKey="x" yKey="revenue" formatter={(v)=> `${v} PLN`} />
-        {/* Możesz wstawić drugi wykres (np. generacja/h) */}
       </div>
 
       <div className="space-y-2">
