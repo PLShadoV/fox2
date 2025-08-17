@@ -37,11 +37,11 @@ export default async function Page(){
   const feedin = fox?.result?.find((v:any)=>v.variable === "feedin");
   const generation = fox?.result?.find((v:any)=>v.variable === "generation");
   const feedinVals: number[] = feedin?.values || []; // kWh per hour
-  const rceRows = (rce?.rows as Array<{ udtczas: string; rce_pln: number }>) || [];
+  const rceRows = (rce?.rows as Array<{ timeISO: string; rce_pln_mwh: number }>) || [];
 
   const hourly = toHourLabels(feedinVals, date).map((row, i) => {
     const r = rceRows[i];
-    const rceMWh = r?.rce_pln ?? 0; // PLN/MWh
+    const rceMWh = r?.rce_pln_mwh ?? 0; // PLN/MWh
     const pricePerKWh = rceMWh / 1000; // PLN/kWh
     const kwh = feedinVals[i] || 0;
     return { x: row.label, kwh, pln: +(kwh * pricePerKWh).toFixed(2), rceMWh };
