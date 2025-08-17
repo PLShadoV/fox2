@@ -34,7 +34,6 @@ function normalizeValues(values: any, unit?: string){
   const maxv = arr.length ? Math.max(...arr) : 0;
   let out = arr.slice();
   let u = String(unit || "kWh");
-  // jeśli dostajemy Wh w "kwh", znormalizuj do kWh
   if (u.toLowerCase() === "kwh" && maxv > 20000){
     out = out.map((v)=> v/1000);
     u = "kWh";
@@ -46,7 +45,6 @@ function normalizeValues(values: any, unit?: string){
   return { unit: u, values: fit24 };
 }
 
-/** Parser wyników report/query w wielu wariantach */
 function parseReportResult(raw:any){
   const out: Array<{ variable: string; unit: string; values: number[] }> = [];
   const push = (label:any, unit:any, values:any)=>{
@@ -79,46 +77,6 @@ function parseReportResult(raw:any){
     }
   }
   return out;
-}
-
-/** Raport dzienny dla energii: generation + feedin. Próbuje różne separatory podpisu i klucz 'dimension' lub 'type'. */
-export async function foxReportQueryDay({ sn, year, month, day, variables = ["generation","feedin"], lang = "pl" }:{
-  sn:string; year:number; month:number; day:number; variables?: string[]; lang?: string;
-}){
-  const token = process.env.FOXESS_API_KEY || "";
-  if (!token) throw new Error("Brak FOXESS_API_KEY");
-  const PATH = "/op/v0/device/report/query";
-  const ts = Date.now();
-  const kinds: SepKind[] = ["crlf", "literal", "lf"];
-  const keys: Array<"dimension"|"type"> = ["dimension","type"];
-  let lastErr = "";
-
-  for (const key of keys){
-    for (const kind of kinds){
-      const headers: Record<string,string> = {
-        "Content-Type": "application/json",
-        "token": token,
-        "timestamp": String(ts),
-        "signature": buildSignature(PATH, token, ts, kind),
-        "lang": lang
-      };
-      const body:any = { sn, year, month, day, variables };
-      (body as any)[key] = "day";
-
-      const { res, json, text } = await callFox(PATH, headers, body);
-      if (!json || typeof json.errno !== "number"){
-        lastErr = `HTTP ${res?.status}: ${text}`;
-        continue;
-      }
-      if (json.errno !== 0){
-        lastErr = `${json.errno}: ${json.msg || "error"}`;
-        continue;
-      }
-      const parsed = parseReportResult(json.result);
-      return parsed;
-    }
-  }
-  throw new Error("FoxESS report failed: " + lastErr);
 }
 
 /** Realtime (pvPower / generationPower -> W) */
@@ -164,6 +122,79 @@ export async function foxRealtimeQuery({ sn, variables }:{ sn:string; variables:
   return { ok:false, error:"FoxESS realtime failed" };
 }
 
+/** Raport dzienny (bezpośrednio do 'day') */
+export async function foxReportQueryDay({ sn, year, month, day, variables = ["generation","feedin"], lang = "pl" }:{
+  sn:string; year:number; month:number; day:number; variables?: string[]; lang?: string;
+}){
+  return await foxReportQuery({ sn, year, month, day, dimension: "day", variables, lang });
+}
+
+/** Raport generyczny (day/month/year) — eksponowany jako 'foxReportQuery' żeby nie ruszać reszty kodu */
+export async function foxReportQuery({
+  sn, year, month, day, dimension, variables = ["generation","feedin"], lang = "pl"
+}:{
+  sn:string; year:number; month?:number; day?:number; dimension: FoxReportDim; variables?: string[]; lang?: string;
+}){
+  const token = process.env.FOXESS_API_KEY || "";
+  if (!token) throw new Error("Brak FOXESS_API_KEY");
+  const PATH = "/op/v0/device/report/query";
+  const ts = Date.now();
+  const kinds: SepKind[] = ["crlf", "literal", "lf"];
+  const keys: Array<"dimension"|"type"> = ["dimension","type"];
+  let lastErr = "";
+
+  for (const key of keys){
+    for (const kind of kinds){
+      const headers: Record<string,string> = {
+        "Content-Type": "application/json",
+        "token": token,
+        "timestamp": String(ts),
+        "signature": buildSignature(PATH, token, ts, kind),
+        "lang": lang
+      };
+      const body:any = { sn, year, variables };
+      if (typeof month === "number") body.month = month;
+      if (typeof day === "number") body.day = day;
+      (body as any)[key] = dimension;
+
+      const { res, json, text } = await callFox(PATH, headers, body);
+      if (!json || typeof json.errno !== "number"){
+        lastErr = `HTTP ${res?.status}: ${text}`;
+        continue;
+      }
+      if (json.errno !== 0){
+        lastErr = `${json.errno}: ${json.msg || "error"}`;
+        continue;
+      }
+      return parseReportResult(json.result);
+    }
+  }
+  throw new Error("FoxESS report failed: " + lastErr);
+}
+
+/** Lista urządzeń (na potrzeby debug route) */
+export async function foxDevices(){
+  const token = process.env.FOXESS_API_KEY || "";
+  if (!token) throw new Error("Brak FOXESS_API_KEY");
+  const PATH = "/op/v0/device/list";
+  const ts = Date.now();
+  const kinds: SepKind[] = ["crlf","literal","lf"];
+  for (const kind of kinds){
+    const headers: Record<string,string> = {
+      "Content-Type": "application/json",
+      "token": token,
+      "timestamp": String(ts),
+      "signature": buildSignature(PATH, token, ts, kind),
+      "lang": process.env.FOXESS_API_LANG || "pl"
+    };
+    const { json, text, res } = await callFox(PATH, headers, { currentPage: 1, pageSize: 50 });
+    if (json && json.errno === 0) return { ok:true, ...json.result };
+    if (!res?.ok) return { ok:false, error: text };
+  }
+  return { ok:false, error:"device list error" };
+}
+
+/** Ping/diagnostyka podpisu */
 export async function foxPing(){
   const token = process.env.FOXESS_API_KEY || "";
   if (!token) throw new Error("Brak FOXESS_API_KEY");
