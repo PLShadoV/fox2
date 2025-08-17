@@ -3,7 +3,7 @@ import crypto from "crypto";
 const FOX_DOMAIN = "https://www.foxesscloud.com";
 
 export type FoxReportDim = "day" | "month" | "year";
-type SepKind = "literal" | "crlf", "lf";
+type SepKind = "literal" | "crlf" | "lf";
 
 function kwToW(val:any, unit?:string){
   const n = Number(val);
@@ -27,18 +27,24 @@ async function callFox(path: string, headers: Record<string,string>, bodyObj: an
   return { res, text, json };
 }
 
-export async function foxReportQuery({ sn, year, month, day, dimension, variables, lang = process.env.FOXESS_API_LANG || "pl", }:{
-  sn: string; year: number; month?: number; day?: number; dimension: FoxReportDim; variables: string[]; lang?: string;
-}){
+export async function foxReportQuery({
+  sn, year, month, day, dimension, variables, lang = process.env.FOXESS_API_LANG || "pl",
+}:{
+  sn: string; year: number; month?: number; day?: number;
+  dimension: FoxReportDim; variables: string[]; lang?: string;
+}) {
   const path = "/op/v0/device/report/query";
   const token = process.env.FOXESS_API_KEY || "";
-  if (!token) throw new Error("Brak FOXESS_API_KEY");
+  if (!token) throw new Error("Brak FOXESS_API_KEY (token MD5).");
+
   const ts = Date.now();
-  const body:any = { sn, year, dimension, variables };
+  const body: any = { sn, year, dimension, variables };
   if (month) body.month = month;
   if (day) body.day = day;
+
   const order: SepKind[] = ["literal", "crlf", "lf"];
   let lastErr: string | null = null;
+
   for (const kind of order) {
     const sign = buildSignature(path, token, ts, kind);
     const headers: Record<string,string> = {
@@ -51,6 +57,7 @@ export async function foxReportQuery({ sn, year, month, day, dimension, variable
       "signature": sign
     };
     const { res, json, text } = await callFox(path, headers, body);
+
     if (!res.ok) { lastErr = `FoxESS ${res.status}: ${text}`; break; }
     if (json && typeof json.errno === "number") {
       if (json.errno === 0) return json.result as Array<{ variable: string; unit: string; values: number[] }>;
@@ -180,12 +187,36 @@ export async function foxRealtimeRaw(sn: string, variables: string[]){
   return { raw: null, pvNowW: null, matchedVar: null };
 }
 
+export async function foxPing(){
+  const path = "/op/v0/device/list";
+  const token = process.env.FOXESS_API_KEY || "";
+  if (!token) throw new Error("Brak FOXESS_API_KEY");
+  const ts = Date.now();
+  const kinds: SepKind[] = ["literal", "crlf", "lf"];
+  const out: any = {};
+  for (const kind of kinds) {
+    const sign = buildSignature(path, token, ts, kind);
+    const headers: Record<string,string> = {
+      "Content-Type": "application/json",
+      "lang": process.env.FOXESS_API_LANG || "pl",
+      "timestamp": String(ts),
+      "token": token,
+      "sign": sign,
+      "signature": sign
+    };
+    const url = FOX_DOMAIN + path;
+    const res = await fetch(url, { method: "POST", headers, body: JSON.stringify({ currentPage: 1, pageSize: 1 }), cache: "no-store" });
+    out[kind] = { ok: res.ok, status: res.status, text: await res.text() };
+  }
+  return out;
+}
+
 export async function foxDevices(){
   const path = "/op/v0/device/list";
   const token = process.env.FOXESS_API_KEY || "";
   if (!token) throw new Error("Brak FOXESS_API_KEY");
   const ts = Date.now();
-  const kinds: SepKind[] = ["literal", "crlf", "lf"].flat() as SepKind[];
+  const kinds: SepKind[] = ["literal", "crlf", "lf"];
   for (const kind of kinds) {
     const sign = buildSignature(path, token, ts, kind);
     const headers: Record<string,string> = {
@@ -217,7 +248,7 @@ export async function foxHistoryDay({ sn, date, variables }:{ sn:string; date:st
     { sn, variables, type: "HOUR", beginDate: d0, endDate: d1 },
     { sn, variables, dimension: "HOUR", startDate: d0, endDate: d1 },
     { sn, variables, type: "HOUR", startDate: d0, endDate: d1 },
-    { sn, variables, dimension: "day", beginDate: d0, endDate: d1 },
+    { sn, variables, dimension: "day", beginDate: d0, endDate: d1 }
   ];
   for (const kind of kinds) {
     const headers: Record<string,string> = {
@@ -242,5 +273,3 @@ export async function foxHistoryDay({ sn, date, variables }:{ sn:string; date:st
   }
   return [];
 }
-
-export default {};
