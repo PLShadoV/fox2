@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-from: 244 244 245; /* zinc-100 */
+  --bg-to: 228 228 231;   /* zinc-200 */
+}
+
+html, body { height: 100%; }
+
+/* glass cards */
+.card {
+  @apply rounded-2xl shadow-soft bg-white/70 dark:bg-zinc-900/60 border border-white/10;
+}
