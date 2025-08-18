@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import StatTile from "@/components/StatTile";
 import RangeButtons from "@/components/RangeButtons";
 import BarChartCard from "@/components/BarChartCard";
@@ -21,17 +22,24 @@ async function tryMany(paths: string[]){
 }
 
 export default function DashboardClient({ initialDate }: { initialDate: string }){
+  const sp = useSearchParams();
   const [date, setDate] = useState(initialDate);
   const [pvNowW, setPvNowW] = useState<number|null>(null);
   const [genTotal, setGenTotal] = useState<number|null>(null);
+  const [genSeries, setGenSeries] = useState<number[]>([]);
   const [revenue, setRevenue] = useState<{ rows: RevenueRow[], total: number|null }>({
     rows: [], total: null
   });
   const [err, setErr] = useState<string| null>(null);
   const [warn, setWarn] = useState<string| null>(null);
 
-  const hourly = useMemo(()=> (revenue.rows || []).map(r=>({ x: String(r.hour).padStart(2,"0")+":00", revenue: r.revenue_pln })), [revenue.rows]);
+  // Keep DashboardClient in sync with URL (?date=...)
+  useEffect(()=>{
+    const d = sp.get("date") || initialDate || new Date().toISOString().slice(0,10);
+    setDate(d);
+  }, [sp, initialDate]);
 
+  // Fetch data when 'date' changes
   useEffect(()=>{
     let cancelled = false;
     setErr(null);
@@ -40,23 +48,42 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
     // 1) realtime with graceful 404 fallback
     tryMany([
       `/api/foxess/realtime`,
+      `/api/foxess/realtime-now`,
       `/api/foxess?mode=realtime`,
-      `/api/foxess`
+      `/api/foxess`,
+      `/api/foxess/debug/realtime`,
+      `/api/foxess/debug/realtime-now`
     ]).then(j => { if (!cancelled) setPvNowW(j?.pvNowW ?? null); })
-      .catch(e => { if (!cancelled) setWarn("Brak endpointu realtime (404) – kafelek pokaże —"); });
+      .catch(_ => { if (!cancelled) setWarn("Brak realtime (404) – kafelek pokaże —"); });
 
-    // 2) day summary
+    // 2) day summary (generation hourly + totals)
     getJSON(`/api/foxess/summary/day?date=${date}`)
-      .then(j => { if (!cancelled) setGenTotal(j?.today?.generation?.total ?? null); })
+      .then(j => {
+        if (cancelled) return;
+        const total = j?.today?.generation?.total ?? null;
+        const series = j?.today?.generation?.series ?? [];
+        setGenTotal(total);
+        setGenSeries(Array.isArray(series) ? series : []);
+      })
       .catch(e => { if (!cancelled) setErr(prev => prev || e.message); });
 
-    // 3) revenue
+    // 3) revenue table/tile
     getJSON(`/api/revenue/day?date=${date}`)
       .then(j => { if (!cancelled) setRevenue({ rows: j?.rows || [], total: j?.totals?.revenue_pln ?? null }); })
       .catch(e => { if (!cancelled) setErr(prev => prev || e.message); });
 
     return ()=> { cancelled = true; }
   }, [date]);
+
+  // Data for generation bar chart
+  const genHourly = useMemo(()=> {
+    const out = [];
+    for (let h=0; h<24; h++){
+      const kwh = Number(genSeries[h] ?? 0);
+      out.push({ x: String(h).padStart(2,"0")+":00", kwh });
+    }
+    return out;
+  }, [genSeries]);
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
@@ -79,12 +106,12 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <StatTile label="Moc teraz" value={pvNowW != null ? `${pvNowW} W` : "—"} />
-        <StatTile label="Wygenerowano (ten dzień)" value={genTotal != null ? `${genTotal.toFixed(1)} kWh` : "—"} />
-        <StatTile label="Dzisiejszy przychód" value={revenue.total != null ? `${revenue.total.toFixed(2)} PLN` : "—"} sub="Liczony z GENERATION × max(RCE,0)/1000" />
+        <StatTile label="Wygenerowano (dzień)" value={genTotal != null ? `${genTotal.toFixed(1)} kWh` : "—"} />
+        <StatTile label="Przychód (dzień)" value={revenue.total != null ? `${revenue.total.toFixed(2)} PLN` : "—"} sub="GENERATION × max(RCE,0)/1000" />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <BarChartCard title={`Przychód na godzinę — ${date}`} data={hourly} xKey="x" yKey="revenue" suffix=" PLN" decimals={2} />
+        <BarChartCard title={`Generacja (kWh) na godzinę — ${date}`} data={genHourly} xKey="x" yKey="kwh" suffix=" kWh" decimals={2} />
       </div>
 
       <div className="space-y-2">
