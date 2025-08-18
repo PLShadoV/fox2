@@ -2,57 +2,35 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-type Cache = { ts: number; value: any };
-const ONE_HOUR = 60 * 60 * 1000;
-const mem: Record<string, Cache> = {};
-
-async function j(url:string){
-  const r = await fetch(url, { cache: "no-store" as any });
-  if (!r.ok) throw new Error(url + " -> " + r.status);
-  return r.json();
-}
-
-function monthDays(year:number, month:number){
-  const last = new Date(Date.UTC(year, month, 0)).getUTCDate(); // month is 1-12
-  const out: string[] = [];
-  for (let d=1; d<=last; d++){
-    const dd = String(d).padStart(2,"0");
-    out.push(`${year}-${String(month).padStart(2,"0")}-${dd}`);
-  }
-  return out;
+function daysInMonth(year:number, month:number){ // month: 1-12
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
 
 export async function GET(req: NextRequest){
   const url = new URL(req.url);
   const date = url.searchParams.get("date");
-  if(!date) return NextResponse.json({ error: "date required" }, { status: 400 });
+  if (!date) return NextResponse.json({ ok:false, error:"date required" }, { status: 400 });
+
+  const d = new Date(date);
+  const y = d.getUTCFullYear();
+  const m = d.getUTCMonth()+1;
+  const dim = daysInMonth(y,m);
   const origin = url.origin;
 
-  const [Y, M] = date.split("-").map(x=> parseInt(x,10));
-  if (!Y || !M) return NextResponse.json({ error: "invalid date" }, { status: 400 });
-  const key = `${Y}-${String(M).padStart(2,"0")}`;
-
-  const now = Date.now();
-  const cached = mem[key];
-  if (cached && now - cached.ts < ONE_HOUR) return NextResponse.json(cached.value);
-
-  // Collect hourly RCE for every day of the month, clamp negatives to 0, compute mean of all hours
-  const days = monthDays(Y, M);
-  let sum = 0;
-  let n = 0;
-  for (const d of days){
+  const values:number[] = [];
+  for (let day=1; day<=dim; day++){
+    const ds = `${y}-${String(m).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
     try{
-      const r = await j(`${origin}/api/rce?date=${d}`);
-      const rows: Array<{ rce_pln_mwh: number }> = r?.rows || [];
+      const r = await fetch(`${origin}/api/rce?date=${ds}`, { cache: "no-store" as any });
+      if (!r.ok) continue;
+      const j = await r.json();
+      const rows = j?.rows || j?.data || j?.result || [];
       for (const row of rows){
-        const v = Math.max(Number(row.rce_pln_mwh ?? 0), 0);
-        sum += v; n += 1;
+        const v = Number(row.rce_pln_mwh ?? row.price ?? row.value ?? 0);
+        if (Number.isFinite(v)) values.push(v);
       }
-    } catch { /* ignore missing days */ }
+    }catch{}
   }
-  const avg = n > 0 ? Number((sum / n).toFixed(2)) : 0;
-  const payload = { ok: true, month: key, rcem_pln_mwh: avg, hours_counted: n };
-
-  mem[key] = { ts: now, value: payload };
-  return NextResponse.json(payload);
+  const avg = values.length ? (values.reduce((a,b)=>a+b,0)/values.length) : 0;
+  return NextResponse.json({ ok:true, rcem_pln_mwh: Number(avg.toFixed(2)), samples: values.length });
 }

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import StatTile from "@/components/StatTile";
 import RangeButtons from "@/components/RangeButtons";
-import AreaChartCard from "@/components/AreaChartCard";
+import PowerCurveCard from "@/components/PowerCurveCard";
 import HourlyRevenueTable from "@/components/HourlyRevenueTable";
 import RangeCalculator from "@/components/RangeCalculator";
 import MonthlyRCEmTable from "@/components/MonthlyRCEmTable";
@@ -45,7 +45,7 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
     setDate(d);
   }, [sp, initialDate]);
 
-  // Realtime – poll co 60s, zachowuj ostatnią wartość przy błędzie
+  // Realtime – poll co 60 s, zachowuj ostatnią wartość przy błędzie
   useEffect(()=>{
     let alive = true;
     const fetchOnce = async ()=>{
@@ -92,30 +92,36 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
     return ()=> { cancelled = true; }
   }, [date, calcMode]);
 
-  // Fala: skumulowana generacja, kroki co 5 min, poprawione etykiety (mm=00..55)
-  const genWave = useMemo(()=>{
+  // Krzywa mocy (kW): z godzinowych kWh -> średnia moc w danej godzinie.
+  // Dla dnia "dziś" ucinamy do teraz; ostatni punkt bierzemy z realtime jeśli jest dostępny.
+  const powerWave = useMemo(()=>{
     const today = new Date().toISOString().slice(0,10);
     const isToday = date === today;
     const now = new Date();
     const nowMin = now.getHours()*60 + now.getMinutes();
-    const pts: {x:string, kwh:number}[] = [];
-    let cum = 0;
+    const pts: {x:string, kw:number}[] = [];
+
     for (let h=0; h<24; h++){
-      const val = Number(genSeries[h] ?? 0); // kWh w danej godzinie
+      const kwh = Number(genSeries[h] ?? 0);
+      const avgkW = kwh; // 1 kWh / 1h => 1 kW
       const steps = 12; // co 5 min
       for (let s=0; s<steps; s++){
         const minute = h*60 + s*5;
         if (isToday && minute > nowMin) break;
-        const frac = (s+1)/steps;            // postęp w godzinie
-        const cur = cum + val * frac;        // wartość skumulowana
         const hh = String(h).padStart(2,"0");
-        const mm = String(s*5).padStart(2,"0"); // 00..55 (bez 60)
-        pts.push({ x: `${hh}:${mm}`, kwh: Number(cur.toFixed(2)) });
+        const mm = String(s*5).padStart(2,"0");
+        pts.push({ x: `${hh}:${mm}`, kw: avgkW });
       }
-      cum += val;
+    }
+    // Podmień ostatni punkt na realtime (jeśli jest)
+    if (isToday && pts.length){
+      const lastIdx = pts.length - 1;
+      if (pvNowW != null){
+        pts[lastIdx] = { x: pts[lastIdx].x, kw: Math.max(0, pvNowW/1000) };
+      }
     }
     return pts;
-  }, [genSeries, date]);
+  }, [genSeries, date, pvNowW]);
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
@@ -143,7 +149,7 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
         </div>
       </div>
 
-      <AreaChartCard title={`Skumulowana generacja — ${date}`} data={genWave} xKey="x" yKey="kwh" suffix=" kWh" decimals={2} />
+      <PowerCurveCard title={`Moc [kW] w ciągu dnia — ${date}`} data={powerWave} xKey="x" yKey="kw" unit="kW" />
 
       <div className="space-y-2">
         <div className="text-sm text-sky-900/70">Tabela godzinowa (generation, cena RCE/RCEm, przychód) — {date}</div>
