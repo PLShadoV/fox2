@@ -2,16 +2,23 @@
 import { useEffect, useState } from "react";
 
 type Row = { month: string; rcem_pln_mwh: number };
+type Resp = { ok:boolean; rows: Row[]; note?: string; error?: string };
 
 export default function MonthlyRCEmTable(){
   const [rows, setRows] = useState<Row[]>([]);
   const [err, setErr] = useState<string|null>(null);
+  const [note, setNote] = useState<string|undefined>(undefined);
+
   useEffect(()=>{
     fetch("/api/rcem", { cache: "no-store" })
       .then(r => r.json())
-      .then(j => setRows(j?.rows || []))
+      .then((j:Resp) => {
+        setRows(j?.rows || []);
+        setNote(j?.note);
+      })
       .catch(e => setErr(String(e)));
   }, []);
+
   return (
     <div className="p-5 rounded-2xl shadow-lg shadow-sky-100/40 bg-white/60 border border-white/40 backdrop-blur-xl">
       <div className="text-sm text-sky-900/70 mb-3">Tabela RCEm (miesięczna cena energii elektrycznej, PSE)</div>
@@ -25,7 +32,9 @@ export default function MonthlyRCEmTable(){
             </tr>
           </thead>
           <tbody>
-            {rows.map((r, i) => (
+            {rows.length === 0 ? (
+              <tr className="border-t border-sky-100/60"><td className="py-2" colSpan={2}>Brak danych z PSE (spróbuj później).</td></tr>
+            ) : rows.map((r, i) => (
               <tr key={i} className="border-t border-sky-100/60">
                 <td className="py-1 pr-4">{r.month}</td>
                 <td className="py-1">{Number(r.rcem_pln_mwh).toFixed(2)}</td>
@@ -34,7 +43,7 @@ export default function MonthlyRCEmTable(){
           </tbody>
         </table>
       </div>
-      <div className="text-[11px] text-sky-900/60 mt-2">Źródło: PSE OIRE (publikacja z opóźnieniem – np. w sierpniu publikowany jest lipiec).</div>
+      {note ? <div className="text-[11px] text-sky-900/60 mt-2">{note}</div> : <div className="text-[11px] text-sky-900/60 mt-2">Źródło: PSE OIRE (publikacja z opóźnieniem – np. w sierpniu publikowany jest lipiec).</div>}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import StatTile from "@/components/StatTile";
 import RangeButtons from "@/components/RangeButtons";
@@ -37,6 +37,7 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
   });
   const [calcMode, setCalcMode] = useState<"rce"|"rcem">("rce");
   const [err, setErr] = useState<string| null>(null);
+  const lastPv = useRef<number|null>(null);
 
   // Sync with URL (?date=...)
   useEffect(()=>{
@@ -44,16 +45,35 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
     setDate(d);
   }, [sp, initialDate]);
 
+  // Realtime – poll co 60s, zachowuj ostatnią wartość przy błędzie
+  useEffect(()=>{
+    let alive = true;
+    const fetchOnce = async ()=>{
+      try{
+        const j = await tryManyRealtime([
+          `/api/foxess/realtime-cached`,
+          `/api/foxess/realtime`,
+          `/api/foxess?mode=realtime`,
+          `/api/foxess/debug/realtime`,
+          `/api/foxess/debug/realtime-now`,
+        ]);
+        if (!alive) return;
+        lastPv.current = j?.pvNowW ?? lastPv.current ?? null;
+        setPvNowW(lastPv.current);
+      }catch{
+        if (!alive) return;
+        setPvNowW(lastPv.current ?? null);
+      }
+    };
+    fetchOnce();
+    const t = setInterval(fetchOnce, 60_000);
+    return ()=> { alive = false; clearInterval(t); };
+  }, []);
+
+  // Dzień: summary + revenue (z cache'owanych endpointów)
   useEffect(()=>{
     let cancelled = false;
     setErr(null);
-
-    tryManyRealtime([
-      `/api/foxess/realtime-cached`,
-      `/api/foxess/realtime`,
-      `/api/foxess?mode=realtime`
-    ]).then(j => { if (!cancelled) setPvNowW(j?.pvNowW ?? null); })
-      .catch(_ => { if (!cancelled) setPvNowW(null); });
 
     getJSON(`/api/foxess/summary/day-cached?date=${date}`)
       .then(j => {
@@ -72,29 +92,29 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
     return ()=> { cancelled = true; }
   }, [date, calcMode]);
 
-  // Build "wave" curve: cumulative kWh every 5 minutes, trimmed to now for today
+  // Fala: skumulowana generacja, kroki co 5 min, poprawione etykiety (mm=00..55)
   const genWave = useMemo(()=>{
     const today = new Date().toISOString().slice(0,10);
     const isToday = date === today;
     const now = new Date();
     const nowMin = now.getHours()*60 + now.getMinutes();
-    const points: {x:string, kwh:number}[] = [];
+    const pts: {x:string, kwh:number}[] = [];
     let cum = 0;
     for (let h=0; h<24; h++){
-      const val = Number(genSeries[h] ?? 0); // kWh in hour h
-      const steps = 12; // 5-min
+      const val = Number(genSeries[h] ?? 0); // kWh w danej godzinie
+      const steps = 12; // co 5 min
       for (let s=0; s<steps; s++){
         const minute = h*60 + s*5;
         if (isToday && minute > nowMin) break;
-        const frac = (s+1)/steps;
-        const cur = cum + val * frac;
+        const frac = (s+1)/steps;            // postęp w godzinie
+        const cur = cum + val * frac;        // wartość skumulowana
         const hh = String(h).padStart(2,"0");
-        const mm = String((s+1)*5).padStart(2,"0");
-        points.push({ x: `${hh}:${mm}`, kwh: Number(cur.toFixed(2)) });
+        const mm = String(s*5).padStart(2,"0"); // 00..55 (bez 60)
+        pts.push({ x: `${hh}:${mm}`, kwh: Number(cur.toFixed(2)) });
       }
       cum += val;
     }
-    return points;
+    return pts;
   }, [genSeries, date]);
 
   return (
@@ -111,7 +131,7 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
       {err ? <div className="p-3 rounded-2xl border border-amber-300 bg-amber-50 text-amber-900 text-sm">Wystąpił błąd: {err}</div> : null}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <StatTile label="Moc teraz" value={pvNowW != null ? `${pvNowW} W` : "—"} sub="Realtime z inwertera" />
+        <StatTile label="Moc teraz" value={pvNowW != null ? `${pvNowW} W` : "—"} sub="Realtime z inwertera (odświeżanie co 60 s)" />
         <StatTile label="Wygenerowano (dzień)" value={genTotal != null ? `${genTotal.toFixed(1)} kWh` : "—"} />
         <div className="flex flex-col gap-2">
           <StatTile label="Przychód (dzień)" value={revenue.total != null ? `${revenue.total.toFixed(2)} PLN` : "—"} sub={calcMode === "rce" ? "RCE godzinowe" : "RCEm (średnia mies.)"} />

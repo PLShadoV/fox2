@@ -29,7 +29,7 @@ export default function AreaChartCard({
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey={xKey} />
+            <XAxis dataKey={xKey} minTickGap={30} />
             <YAxis />
             <Tooltip formatter={(val)=> fmt(val)} />
             <Area type="monotone" dataKey={yKey} fill="url(#fillFade)" stroke="#0ea5e9" strokeWidth={2} />
