@@ -1,33 +1,36 @@
-'use client';
-import React from 'react';
+"use client";
 
-type StatTileProps = {
-  /** Preferred prop names */
-  title?: string;
-  subtitle?: string;
+import React from "react";
+import clsx from "clsx";
 
-  /** Backwards-compatible aliases */
-  label?: string;
-  sub?: string;
-
-  /** Displayed main value (already formatted) */
+type Props = {
+  title: string;
   value: string;
-  className?: string;
+  subtitle?: string;
+  highlight?: "primary" | "success" | "warning";
 };
 
-/**
- * Glass-style stat tile. Accepts both (title/subtitle) and legacy (label/sub) props.
- */
-export default function StatTile(props: StatTileProps) {
-  const heading = (props.title ?? props.label ?? '').trim();
-  const subline = (props.subtitle ?? props.sub)?.trim();
-  const cls = `pv-card pv-card--glass pv-stat ${props.className ?? ''}`.trim();
-
+export default function StatTile({ title, value, subtitle, highlight }: Props) {
   return (
-    <div className={cls}>
-      {heading && <div className="pv-stat-title">{heading}</div>}
-      <div className="pv-stat-value">{props.value}</div>
-      {subline && <div className="pv-stat-sub">{subline}</div>}
+    <div
+      className={clsx(
+        "glass-tile p-5 rounded-2xl backdrop-blur-md",
+        "border border-white/15 shadow-lg",
+        "transition-transform hover:-translate-y-0.5"
+      )}
+    >
+      <div className="text-xs tracking-wide uppercase opacity-80">{title}</div>
+      <div className={clsx(
+        "mt-1 text-3xl font-semibold",
+        highlight === "primary" && "text-sky-300",
+        highlight === "success" && "text-emerald-300",
+        highlight === "warning" && "text-amber-300"
+      )}>
+        {value}
+      </div>
+      {subtitle && (
+        <div className="mt-1 text-xs opacity-70">{subtitle}</div>
+      )}
     </div>
   );
 }
