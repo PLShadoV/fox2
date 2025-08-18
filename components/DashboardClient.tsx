@@ -135,7 +135,7 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
     <div className="max-w-6xl mx-auto p-6 space-y-6">\n            {/* KPI ROW START */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <StatTile title="Moc teraz" value={`${(pvNowW??0)/1000 >= 0 ? ((pvNowW??0)/1000).toFixed(2) : "0.00"} kW`} />
-        <StatTile title="Wygenerowano (dzień)" value={`${genTotal.toFixed(1)} kWh`} />
+        <StatTile title="Wygenerowano (dzień)" value={`${((genTotal ?? 0)).toFixed(1)} kWh`} />
         <StatTile title="Przychód (dzień)" value={`${(revenueTotal ?? 0).toFixed(2)} PLN`} />
       </div>
       {/* KPI ROW END */}
