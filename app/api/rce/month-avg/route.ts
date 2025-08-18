@@ -1,0 +1,1 @@
+<route.ts for /api/rce/month-avg placeholder>
