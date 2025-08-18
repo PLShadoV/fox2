@@ -3,14 +3,24 @@
 import React from "react";
 import clsx from "clsx";
 
-type Props = {
-  title: string;
+type NewProps = {
+  title?: string;
   value: string;
   subtitle?: string;
   highlight?: "primary" | "success" | "warning";
+  // Backward-compat props (old usage in DashboardClient)
+  label?: string;
+  sub?: string;
 };
 
-export default function StatTile({ title, value, subtitle, highlight }: Props) {
+/**
+ * StatTile now supports BOTH the new API ({ title, subtitle })
+ * and the old API ({ label, sub }). This keeps existing code working.
+ */
+export default function StatTile(props: NewProps) {
+  const title = props.title ?? props.label ?? "";
+  const subtitle = props.subtitle ?? props.sub;
+
   return (
     <div
       className={clsx(
@@ -20,17 +30,17 @@ export default function StatTile({ title, value, subtitle, highlight }: Props) {
       )}
     >
       <div className="text-xs tracking-wide uppercase opacity-80">{title}</div>
-      <div className={clsx(
-        "mt-1 text-3xl font-semibold",
-        highlight === "primary" && "text-sky-300",
-        highlight === "success" && "text-emerald-300",
-        highlight === "warning" && "text-amber-300"
-      )}>
-        {value}
+      <div
+        className={clsx(
+          "mt-1 text-3xl font-semibold",
+          props.highlight === "primary" && "text-sky-300",
+          props.highlight === "success" && "text-emerald-300",
+          props.highlight === "warning" && "text-amber-300"
+        )}
+      >
+        {props.value}
       </div>
-      {subtitle && (
-        <div className="mt-1 text-xs opacity-70">{subtitle}</div>
-      )}
+      {subtitle && <div className="mt-1 text-xs opacity-70">{subtitle}</div>}
     </div>
   );
 }
