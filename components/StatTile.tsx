@@ -1,10 +1,15 @@
-"use client";
-export default function StatTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
+'use client';
+import React from 'react';
+
+export default function StatTile(
+  { title, value, subtitle }:
+  { title: string, value: string, subtitle?: string }
+) {
   return (
-    <div className="p-5 rounded-2xl shadow-lg shadow-sky-100/40 bg-white/60 border border-white/40 backdrop-blur-xl flex flex-col gap-1">
-      <div className="text-sm text-sky-900/70">{label}</div>
-      <div className="text-3xl font-semibold tracking-tight text-sky-900">{value}</div>
-      {sub ? <div className="text-xs text-sky-800/60">{sub}</div> : null}
+    <div className="pv-card p-6 shadow-md">
+      <div className="text-sm opacity-80">{title}</div>
+      <div className="mt-1 text-4xl font-bold tracking-tight">{value}</div>
+      {subtitle && <div className="mt-2 text-sm opacity-75">{subtitle}</div>}
     </div>
   );
 }
