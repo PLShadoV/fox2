@@ -9,8 +9,11 @@ async function getJSON(url: string){
 
 export default function RangeCalculator(){
   const today = new Date().toISOString().slice(0,10);
-  const monthStart = new Date(); monthStart.setDate(1);
-  const [from, setFrom] = useState(monthStart.toISOString().slice(0,10));
+  const monthStartD = new Date();
+  monthStartD.setDate(1);
+  const defaultFrom = monthStartD.toISOString().slice(0,10);
+
+  const [from, setFrom] = useState(defaultFrom);
   const [to, setTo] = useState(today);
   const [mode, setMode] = useState<"rce"|"rcem">("rce");
   const [loading, setLoading] = useState(false);
