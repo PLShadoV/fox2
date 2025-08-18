@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
 const MONTHS_PL = ["styczeń","luty","marzec","kwiecień","maj","czerwiec","lipiec","sierpień","wrzesień","październik","listopad","grudzień"];
 const MONTHS_NORM = ["styczen","luty","marzec","kwiecien","maj","czerwiec","lipiec","sierpien","wrzesien","pazdziernik","listopad","grudzien"];
@@ -10,46 +10,67 @@ function norm(txt:string){
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
-type Item = { monthIndex:number; monthLabel:string; year:number; value:number|null; ym?:string };
+type Item = { monthIndex:number; monthLabel:string; year:number; value:number|null };
 
 function parseRCEm(html:string){
   const plain = norm(html);
-  // Find table rows with year, month name and numeric value
-  const rows = Array.from(plain.matchAll(/(\d{4}).{0,20}?(styczen|luty|marzec|kwiecien|maj|czerwiec|lipiec|sierpien|wrzesien|pazdziernik|listopad|grudzien).*?(\d+[\.,]\d+)/g));
   const items: Item[] = [];
-  for (const m of rows){
-    const year = Number(m[1]);
-    const monthNorm = m[2];
-    const value = Number(String(m[3]).replace(",", "."));
-    const monthIndex = Math.max(0, MONTHS_NORM.indexOf(monthNorm));
-    const monthLabel = MONTHS_PL[monthIndex] || monthNorm;
-    items.push({ year, monthIndex, monthLabel, value, ym: `${year}-${String(monthIndex+1).padStart(2,"0")}` });
+
+  for (let mi=0; mi<MONTHS_NORM.length; mi++){
+    const m = MONTHS_NORM[mi];
+    const re = new RegExp(`\\b${m}\\b`, "g");
+    let match;
+    while ((match = re.exec(plain))){
+      const idx = match.index;
+
+      // find year near the month (search backwards then forwards)
+      const back = plain.slice(Math.max(0, idx-1200), idx);
+      const fwd  = plain.slice(idx, idx+1200);
+      const yearBack = back.match(/20\d{2}/g)?.pop();
+      const yearFwd  = fwd.match(/20\d{2}/g)?.[0];
+      const year = yearBack ? Number(yearBack) : (yearFwd ? Number(yearFwd) : new Date().getFullYear());
+
+      // find number after "rcem"
+      const rcemBlock = fwd.slice(0, 260);
+      const numMatch = rcemBlock.match(/rcem[^0-9]*?(\d{1,4}(?:[.,]\d{2}))/);
+      const value = numMatch ? Number(numMatch[1].replace(",", ".")) : null;
+
+      // push
+      const label = MONTHS_PL[mi];
+      items.push({ monthIndex: mi, monthLabel: label, year, value });
+    }
   }
-  // De-duplicate by ym (first occurrence is newest on PSE page usually)
-  const seen = new Set<string>();
-  const unique: Item[] = [];
+
+  // de-duplicate by year+monthIndex and keep the first with a number
+  const map = new Map<string, Item>();
   for (const it of items){
-    if (it.ym && !seen.has(it.ym)){ seen.add(it.ym); unique.push(it); }
+    const key = `${it.year}-${it.monthIndex}`;
+    if (!map.has(key) || (it.value!=null && map.get(key)!.value==null)){
+      map.set(key, it);
+    }
   }
-  return unique;
+  const out = Array.from(map.values());
+
+  // filter out future months (no showing next month ahead)
+  const now = new Date();
+  const curY = now.getFullYear();
+  const curM = now.getMonth(); // 0..11
+  const filtered = out.filter(it => (it.year < curY) || (it.year === curY && it.monthIndex <= curM));
+
+  // sort DESC by year, month
+  filtered.sort((a,b)=> b.year - a.year || b.monthIndex - a.monthIndex);
+
+  // last 18 entries max
+  return filtered.slice(0, 18);
 }
 
-export async function GET(req: NextRequest){
+export async function GET(){
   try{
-    const url = new URL(req.url);
-    const dateParam = url.searchParams.get("date") || undefined;
     const res = await fetch("https://www.pse.pl/oire/rcem-rynkowa-miesieczna-cena-energii-elektrycznej", { next: { revalidate: 21600 } });
     if (!res.ok) return NextResponse.json({ ok:false, source:"pse", status:res.status }, { status:200 });
     const html = await res.text();
     const items = parseRCEm(html);
-
-    // Compute rcem for a given YYYY-MM-DD (or today) if requested
-    const target = dateParam ? new Date(dateParam+"T00:00:00") : new Date();
-    const ym = `${target.getFullYear()}-${String(target.getMonth()+1).padStart(2,"0")}`;
-    const monthItem = items.find(it => it.ym === ym) || null;
-    const rcem_pln_mwh = monthItem?.value ?? null;
-
-    return NextResponse.json({ ok:true, source:"pse", ym, rcem_pln_mwh, current_month_rcem_pln_mwh: rcem_pln_mwh, items });
+    return NextResponse.json({ ok:true, source:"pse", items });
   }catch(e:any){
     return NextResponse.json({ ok:false, error: e?.message || String(e) }, { status:200 });
   }
