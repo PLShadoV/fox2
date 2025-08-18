@@ -31,7 +31,7 @@ export async function GET(req: NextRequest){
   for (let t = start.getTime(); t <= end.getTime(); t += oneDay){
     const day = toISO(new Date(t));
     const [sum, rev] = await Promise.all([
-      j(`${origin}/api/foxess/summary/day?date=${day}`),
+      j(`${origin}/api/foxess/summary/day-cached?date=${day}`),
       j(`${origin}/api/revenue/day?date=${day}&mode=${mode}`),
     ]);
     const kwh = Number(sum?.today?.generation?.total ?? 0);

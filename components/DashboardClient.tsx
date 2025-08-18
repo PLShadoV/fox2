@@ -7,6 +7,7 @@ import RangeButtons from "@/components/RangeButtons";
 import AreaChartCard from "@/components/AreaChartCard";
 import HourlyRevenueTable from "@/components/HourlyRevenueTable";
 import RangeCalculator from "@/components/RangeCalculator";
+import MonthlyRCEmTable from "@/components/MonthlyRCEmTable";
 
 type RevenueRow = { hour:number;kwh:number;price_pln_mwh:number;price_used_pln_mwh:number;revenue_pln:number; };
 
@@ -16,18 +17,12 @@ async function getJSON(path: string){
   return res.json();
 }
 async function tryManyRealtime(paths: string[]){
-  let last404 = false;
   for (const p of paths){
     try {
       const j = await getJSON(p);
       if (j && j.pvNowW != null) return j;
-    } catch(e:any){
-      const is404 = /404/.test(String(e));
-      last404 = last404 || is404;
-      if (!is404) throw e;
-    }
+    } catch{ /* try next */ }
   }
-  if (last404) throw new Error("Realtime endpoint not found (404)");
   throw new Error("Realtime data unavailable");
 }
 
@@ -40,9 +35,8 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
   const [revenue, setRevenue] = useState<{ rows: RevenueRow[], total: number|null }>({
     rows: [], total: null
   });
-  const [calcMode, setCalcMode] = useState<"rce"|"rcem">("rce"); // toggle RCE vs RCEm
+  const [calcMode, setCalcMode] = useState<"rce"|"rcem">("rce");
   const [err, setErr] = useState<string| null>(null);
-  const [warn, setWarn] = useState<string| null>(null);
 
   // Sync with URL (?date=...)
   useEffect(()=>{
@@ -50,24 +44,18 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
     setDate(d);
   }, [sp, initialDate]);
 
-  // Fetch data on date or mode change
   useEffect(()=>{
     let cancelled = false;
     setErr(null);
-    setWarn(null);
 
-    // realtime (graceful if 404)
     tryManyRealtime([
+      `/api/foxess/realtime-cached`,
       `/api/foxess/realtime`,
-      `/api/foxess?mode=realtime`,
-      `/api/foxess`,
-      `/api/foxess/debug/realtime`,
-      `/api/foxess/debug/realtime-now`
+      `/api/foxess?mode=realtime`
     ]).then(j => { if (!cancelled) setPvNowW(j?.pvNowW ?? null); })
-      .catch(_ => { if (!cancelled) setWarn("Brak realtime – kafelek pokaże —"); });
+      .catch(_ => { if (!cancelled) setPvNowW(null); });
 
-    // day summary (generation totals + hourly series)
-    getJSON(`/api/foxess/summary/day?date=${date}`)
+    getJSON(`/api/foxess/summary/day-cached?date=${date}`)
       .then(j => {
         if (cancelled) return;
         const total = j?.today?.generation?.total ?? null;
@@ -77,7 +65,6 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
       })
       .catch(e => { if (!cancelled) setErr(prev => prev || e.message); });
 
-    // revenue table/tile (supports mode=rce/rcem)
     getJSON(`/api/revenue/day?date=${date}&mode=${calcMode}`)
       .then(j => { if (!cancelled) setRevenue({ rows: j?.rows || [], total: j?.totals?.revenue_pln ?? null }); })
       .catch(e => { if (!cancelled) setErr(prev => prev || e.message); });
@@ -85,69 +72,58 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
     return ()=> { cancelled = true; }
   }, [date, calcMode]);
 
-  // Area chart data: hourly generation, trimmed to "now" if looking at today
-  const genHourly = useMemo(()=> {
-    const out: {x:string;kwh:number}[] = [];
+  // Build "wave" curve: cumulative kWh every 5 minutes, trimmed to now for today
+  const genWave = useMemo(()=>{
     const today = new Date().toISOString().slice(0,10);
     const isToday = date === today;
-    const nowHour = new Date().getHours();
-    const len = isToday ? Math.min(24, Math.max(1, nowHour + 1)) : 24;
-    for (let h=0; h<len; h++){
-      const kwh = Number(genSeries[h] ?? 0);
-      out.push({ x: String(h).padStart(2,"0")+":00", kwh });
+    const now = new Date();
+    const nowMin = now.getHours()*60 + now.getMinutes();
+    const points: {x:string, kwh:number}[] = [];
+    let cum = 0;
+    for (let h=0; h<24; h++){
+      const val = Number(genSeries[h] ?? 0); // kWh in hour h
+      const steps = 12; // 5-min
+      for (let s=0; s<steps; s++){
+        const minute = h*60 + s*5;
+        if (isToday && minute > nowMin) break;
+        const frac = (s+1)/steps;
+        const cur = cum + val * frac;
+        const hh = String(h).padStart(2,"0");
+        const mm = String((s+1)*5).padStart(2,"0");
+        points.push({ x: `${hh}:${mm}`, kwh: Number(cur.toFixed(2)) });
+      }
+      cum += val;
     }
-    return out;
+    return points;
   }, [genSeries, date]);
-
-  const todayISO = new Date().toISOString().slice(0,10);
-  const isToday = date === todayISO;
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <h1 className="text-2xl font-semibold tracking-tight text-sky-900">PV Dashboard</h1>
         <div className="flex items-center gap-2">
-          {/* External links */}
           <a href="https://www.foxesscloud.com" target="_blank" className="px-3 py-2 rounded-2xl bg-white/60 border border-white/30 backdrop-blur-xl shadow-sm hover:bg-white/70 transition glass-focus">FoxESS</a>
           <a href="https://raporty.pse.pl/report/rce-pln" target="_blank" className="px-3 py-2 rounded-2xl bg-white/60 border border-white/30 backdrop-blur-xl shadow-sm hover:bg-white/70 transition glass-focus">RCE (PSE)</a>
           <RangeButtons />
         </div>
       </div>
 
-      {err ? (
-        <div className="p-3 rounded-2xl border border-amber-300 bg-amber-50 text-amber-900 text-sm">
-          Wystąpił błąd podczas pobierania danych: {err}
-        </div>
-      ) : null}
-
-      {warn ? (
-        <div className="p-3 rounded-2xl border border-sky-200 bg-sky-50 text-sky-800 text-xs">
-          {warn}
-        </div>
-      ) : null}
+      {err ? <div className="p-3 rounded-2xl border border-amber-300 bg-amber-50 text-amber-900 text-sm">Wystąpił błąd: {err}</div> : null}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <StatTile label="Moc teraz" value={isToday ? (pvNowW != null ? `${pvNowW} W` : "—") : "—"} sub={isToday ? undefined : "Realtime tylko dla dzisiaj"} />
+        <StatTile label="Moc teraz" value={pvNowW != null ? `${pvNowW} W` : "—"} sub="Realtime z inwertera" />
         <StatTile label="Wygenerowano (dzień)" value={genTotal != null ? `${genTotal.toFixed(1)} kWh` : "—"} />
         <div className="flex flex-col gap-2">
           <StatTile label="Przychód (dzień)" value={revenue.total != null ? `${revenue.total.toFixed(2)} PLN` : "—"} sub={calcMode === "rce" ? "RCE godzinowe" : "RCEm (średnia mies.)"} />
           <div className="self-end flex items-center gap-2 text-xs text-sky-900/70">
             Tryb obliczeń:
-            <button
-              onClick={()=> setCalcMode("rce")}
-              className={"px-3 py-1 rounded-xl border " + (calcMode==="rce" ? "bg-sky-500 text-white border-sky-500" : "bg-white/60 border-white/30")}
-            >RCE</button>
-            <button
-              onClick={()=> setCalcMode("rcem")}
-              className={"px-3 py-1 rounded-xl border " + (calcMode==="rcem" ? "bg-sky-500 text-white border-sky-500" : "bg-white/60 border-white/30")}
-            >RCEm</button>
+            <button onClick={()=> setCalcMode("rce")} className={"px-3 py-1 rounded-xl border " + (calcMode==="rce" ? "bg-sky-500 text-white border-sky-500" : "bg-white/60 border-white/30")}>RCE</button>
+            <button onClick={()=> setCalcMode("rcem")} className={"px-3 py-1 rounded-xl border " + (calcMode==="rcem" ? "bg-sky-500 text-white border-sky-500" : "bg-white/60 border-white/30")}>RCEm</button>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <AreaChartCard title={`Generacja (kWh) na godzinę — ${date}`} data={genHourly} xKey="x" yKey="kwh" suffix=" kWh" decimals={2} />
-      </div>
+      <AreaChartCard title={`Skumulowana generacja — ${date}`} data={genWave} xKey="x" yKey="kwh" suffix=" kWh" decimals={2} />
 
       <div className="space-y-2">
         <div className="text-sm text-sky-900/70">Tabela godzinowa (generation, cena RCE/RCEm, przychód) — {date}</div>
@@ -155,6 +131,8 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
       </div>
 
       <RangeCalculator />
+
+      <MonthlyRCEmTable />
     </div>
   );
 }

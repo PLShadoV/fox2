@@ -1,7 +1,9 @@
 "use client";
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceArea } from "recharts";
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 
-export default function AreaChartCard({ title, data, xKey, yKey, suffix, decimals = 0 }: {
+export default function AreaChartCard({
+  title, data, xKey, yKey, suffix, decimals = 1
+}:{
   title: string;
   data: any[];
   xKey: string;
@@ -14,7 +16,6 @@ export default function AreaChartCard({ title, data, xKey, yKey, suffix, decimal
     if (!Number.isFinite(n)) return String(v ?? "");
     return n.toFixed(decimals) + (suffix ?? "");
   };
-  const lastIndex = data.length - 1;
   return (
     <div className="p-5 rounded-2xl shadow-lg shadow-sky-100/40 bg-white/60 border border-white/40 backdrop-blur-xl">
       <div className="text-sm text-sky-900/70 mb-2">{title}</div>
@@ -32,9 +33,6 @@ export default function AreaChartCard({ title, data, xKey, yKey, suffix, decimal
             <YAxis />
             <Tooltip formatter={(val)=> fmt(val)} />
             <Area type="monotone" dataKey={yKey} fill="url(#fillFade)" stroke="#0ea5e9" strokeWidth={2} />
-            {lastIndex >= 0 ? (
-              <ReferenceArea x1={data[lastIndex][xKey]} x2={data[lastIndex][xKey]} strokeOpacity={0} />
-            ) : null}
           </AreaChart>
         </ResponsiveContainer>
       </div>

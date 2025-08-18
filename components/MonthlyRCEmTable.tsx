@@ -1,0 +1,40 @@
+"use client";
+import { useEffect, useState } from "react";
+
+type Row = { month: string; rcem_pln_mwh: number };
+
+export default function MonthlyRCEmTable(){
+  const [rows, setRows] = useState<Row[]>([]);
+  const [err, setErr] = useState<string|null>(null);
+  useEffect(()=>{
+    fetch("/api/rcem", { cache: "no-store" })
+      .then(r => r.json())
+      .then(j => setRows(j?.rows || []))
+      .catch(e => setErr(String(e)));
+  }, []);
+  return (
+    <div className="p-5 rounded-2xl shadow-lg shadow-sky-100/40 bg-white/60 border border-white/40 backdrop-blur-xl">
+      <div className="text-sm text-sky-900/70 mb-3">Tabela RCEm (miesięczna cena energii elektrycznej, PSE)</div>
+      {err ? <div className="text-amber-700 text-sm">{err}</div> : null}
+      <div className="overflow-x-auto">
+        <table className="min-w-[400px] text-sm">
+          <thead>
+            <tr className="text-left text-sky-900/70">
+              <th className="py-1 pr-4">Miesiąc</th>
+              <th className="py-1">RCEm (PLN/MWh)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i} className="border-t border-sky-100/60">
+                <td className="py-1 pr-4">{r.month}</td>
+                <td className="py-1">{Number(r.rcem_pln_mwh).toFixed(2)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="text-[11px] text-sky-900/60 mt-2">Źródło: PSE OIRE (publikacja z opóźnieniem – np. w sierpniu publikowany jest lipiec).</div>
+    </div>
+  );
+}
