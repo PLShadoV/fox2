@@ -1,44 +1,30 @@
-// components/ThemeToggle.tsx
+
 "use client";
 
 import { useEffect, useState } from "react";
 
-const KEY = "pv-theme"; // "dark" | "light"
-
-function applyTheme(t: "dark" | "light") {
-  const el = document.documentElement;
-  el.dataset.theme = t;
-  try { localStorage.setItem(KEY, t); } catch {}
-}
-
+/**
+ * Przełącznik motywu. Używa atrybutu data-theme na <html>.
+ * Domyślnie "dark". Stan zapisywany w localStorage.
+ */
 export default function ThemeToggle() {
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [theme, setTheme] = useState<"dark"|"light">("dark");
 
   useEffect(() => {
-    // domyślnie ciemny
-    let t: "dark" | "light" = "dark";
-    try {
-      const saved = localStorage.getItem(KEY) as "dark" | "light" | null;
-      if (saved === "light" || saved === "dark") t = saved;
-    } catch {}
-    setTheme(t);
-    applyTheme(t);
+    const saved = (localStorage.getItem("pv-theme") as "dark"|"light" | null) || "dark";
+    setTheme(saved);
+    document.documentElement.setAttribute("data-theme", saved);
   }, []);
 
-  const flip = () => {
-    const t = theme === "dark" ? "light" : "dark";
-    setTheme(t);
-    applyTheme(t);
+  const toggle = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    document.documentElement.setAttribute("data-theme", next);
+    localStorage.setItem("pv-theme", next);
   };
 
   return (
-    <button
-      onClick={flip}
-      className="pv-chip"
-      aria-label="Przełącz motyw"
-      title="Przełącz motyw"
-      type="button"
-    >
+    <button onClick={toggle} className="pv-chip" aria-label="Zmień motyw">
       {theme === "dark" ? "Jasny" : "Ciemny"}
     </button>
   );

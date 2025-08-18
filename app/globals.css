@@ -1,65 +1,100 @@
-/* app/globals.css – wariant z motywami. Jeśli masz własny plik, możesz wkleić blok :root + klasy pv-* na koniec. */
-:root[data-theme="dark"]{
-  --bg: #0f1823;
-  --panel: #2a3a4e;
-  --panel-2: #33465f;
-  --text: #e8f0f6;
-  --muted: #c7d2e1;
-  --brand: #2db5ff;
-  --good: #26d07c;
-  --chip-bg: #0f1823;
-  --chip-border: #4e6a8c;
-  --shadow: 0 12px 24px rgba(0,0,0,.35);
-}
-:root[data-theme="light"]{
-  --bg: #f3f7fb;
-  --panel: #eef3f8;
-  --panel-2: #e5edf6;
-  --text: #0b2540;
-  --muted: #3b556e;
-  --brand: #1d8fd6;
-  --good: #129f5e;
-  --chip-bg: #fff;
-  --chip-border: #b7c6d6;
-  --shadow: 0 8px 18px rgba(10,40,70,.15);
+
+/* RESET (delikatny) */
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+
+/* Motywy */
+:root{
+  --bg: #0e1621;
+  --bg-elev: #172030;
+  --card: rgba(255,255,255,0.08);
+  --card-border: rgba(255,255,255,0.12);
+  --text: #e6f3ff;
+  --muted: #9fb3c8;
+  --accent: #38bdf8; /* cyan-400 */
+  --accent-2: #60a5fa; /* blue-400 */
+  --chip-bg: rgba(255,255,255,0.08);
+  --chip-active: #22a6f2;
+  --table-row: rgba(255,255,255,0.03);
+  --table-row-alt: rgba(255,255,255,0.045);
+  --input-bg: rgba(255,255,255,0.08);
+  --shadow: 0 10px 30px rgba(0,0,0,.35);
 }
 
-html, body {
-  background: var(--bg);
+html[data-theme="light"]{
+  --bg:#f5f8fc;
+  --bg-elev:#ecf2fb;
+  --card: rgba(0,0,0,0.04);
+  --card-border: rgba(0,0,0,0.08);
+  --text:#0b2540;
+  --muted:#395b7a;
+  --accent:#0ea5e9;
+  --accent-2:#2563eb;
+  --chip-bg: rgba(0,0,0,0.06);
+  --chip-active:#0ea5e9;
+  --table-row: rgba(0,0,0,0.03);
+  --table-row-alt: rgba(0,0,0,0.06);
+  --input-bg: rgba(255,255,255,0.9);
+  --shadow: 0 12px 24px rgba(15,23,42,.08);
+}
+
+/* Layout bazowy */
+body{
+  background: radial-gradient(1200px 800px at 10% 10%, #122238 0%, var(--bg) 40%) no-repeat, var(--bg);
   color: var(--text);
 }
 
-/* kafle */
+/* Karty / kafelki */
 .pv-card{
-  background: linear-gradient(180deg, var(--panel), var(--panel-2));
-  border-radius: 18px;
-  padding: 22px 26px;
+  background: var(--card);
+  border:1px solid var(--card-border);
+  border-radius: 16px;
   box-shadow: var(--shadow);
+  padding: 20px;
+  backdrop-filter: blur(6px);
 }
-.pv-card h3{ font-size:14px; opacity:.8; margin:0 0 8px; }
-.pv-card .pv-value{ font-size:38px; font-weight:700; letter-spacing:.3px; }
 
-/* chips */
+.pv-card h3{margin:0 0 12px 0; font-weight:600; color:var(--muted); font-size:14px; letter-spacing:.02em}
+.pv-card .pv-big{font-size:40px; font-weight:700; color:var(--text)}
+
+/* Top bar chips */
 .pv-chip{
-  background: var(--chip-bg);
-  border: 1px solid var(--chip-border);
-  color: var(--text);
-  padding: 10px 16px;
-  border-radius: 18px;
-  line-height: 1;
+  display:inline-flex; align-items:center; justify-content:center;
+  height:36px; padding:0 14px; gap:8px;
+  background:var(--chip-bg); color:var(--text);
+  border:1px solid var(--card-border);
+  border-radius: 20px; cursor:pointer;
+  transition: all .15s ease;
 }
-.pv-chip--active{
-  background: var(--brand);
-  border-color: var(--brand);
-  color: white;
-}
+.pv-chip:hover{ transform: translateY(-1px); border-color: var(--accent) }
+.pv-chip--active{ background: var(--chip-active); color:white; border-color: transparent }
 
-/* tabela – lepszy kontrast */
-.pv-table{
-  background: linear-gradient(180deg, var(--panel), var(--panel-2));
-  border-radius: 18px;
-  box-shadow: var(--shadow);
+/* Inputy / datepickery */
+.pv-input{
+  background: var(--input-bg);
+  color: var(--text);
+  border:1px solid var(--card-border);
+  border-radius: 10px;
+  padding:8px 12px;
+  outline:none;
 }
-.pv-table th, .pv-table td{
-  border-bottom: 1px solid rgba(255,255,255,.08);
-}
+.pv-input::placeholder{ color: var(--muted) }
+.pv-input:focus{ border-color: var(--accent) }
+
+/* Tabela */
+table.pv-table{ width:100%; border-collapse:collapse; }
+table.pv-table th, table.pv-table td{ padding:12px 14px; font-size:14px; }
+table.pv-table thead th{ text-align:left; color:var(--muted); border-bottom:1px solid var(--card-border) }
+table.pv-table tbody tr:nth-child(odd){ background: var(--table-row) }
+table.pv-table tbody tr:nth-child(even){ background: var(--table-row-alt) }
+table.pv-table tfoot td{ font-weight:700; border-top:1px solid var(--card-border) }
+
+/* Sekcje strony */
+.pv-container{ max-width: 1180px; margin: 28px auto; padding: 0 18px }
+.pv-topbar{ display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:22px }
+.pv-kpi{ display:grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-bottom: 20px }
+@media (max-width: 980px){ .pv-kpi{ grid-template-columns: 1fr } }
+
+/* Wykres – kontener (recharts lub canvas) */
+.pv-chart{ background: var(--card); border:1px solid var(--card-border); border-radius:16px; padding:12px; box-shadow:var(--shadow) }
