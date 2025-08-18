@@ -1,31 +1,44 @@
+'use client';
 
-"use client";
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from 'react';
 
+/**
+ * Simple theme toggle that stores preference in localStorage
+ * and applies `data-theme="dark|light"` on <html>. Default = dark.
+ */
 export default function ThemeToggle() {
-  const [theme, setTheme] = useState<"light"|"dark">("dark");
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
   useEffect(() => {
-    const saved = window.localStorage.getItem("theme");
-    if (saved === "light" || saved === "dark") {
-      setTheme(saved as any);
-      document.documentElement.setAttribute("data-theme", saved);
-    } else {
-      setTheme("dark");
-      document.documentElement.setAttribute("data-theme", "dark");
+    // Load pref
+    const saved = typeof window !== 'undefined' ? (localStorage.getItem('pv.theme') as 'dark' | 'light' | null) : null;
+    const initial = saved ?? 'dark';
+    setTheme(initial);
+    if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('data-theme', initial);
     }
   }, []);
 
-  function toggle() {
-    const next = theme === "dark" ? "light" : "dark";
+  const toggle = () => {
+    const next = theme === 'dark' ? 'light' : 'dark';
     setTheme(next);
-    document.documentElement.setAttribute("data-theme", next);
-    window.localStorage.setItem("theme", next);
-  }
+    if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('data-theme', next);
+    }
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('pv.theme', next);
+    }
+  };
 
   return (
-    <button className="pv-chip" onClick={toggle}>
-      {theme === "dark" ? "Jasny" : "Ciemny"}
+    <button
+      type="button"
+      aria-label="Przełącz motyw"
+      onClick={toggle}
+      className={`pv-chip ${theme === 'dark' ? 'pv-chip--active' : ''}`}
+      title={theme === 'dark' ? 'Ciemny (aktywny)' : 'Jasny (kliknij aby przełączyć)'}
+    >
+      {theme === 'dark' ? 'Ciemny' : 'Jasny'}
     </button>
   );
 }

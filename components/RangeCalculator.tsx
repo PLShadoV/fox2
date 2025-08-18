@@ -1,157 +1,138 @@
+'use client';
 
-"use client";
+import { useEffect, useMemo, useState } from 'react';
 
-import React, { useMemo, useState } from "react";
+type Mode = 'rce' | 'rcem';
 
-type Mode = "rce" | "rcem";
+function toIsoDate(d: Date): string {
+  // YYYY-MM-DD
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 
-function parseDateLoose(s: string): Date | null {
+function parseDateFlexible(s: string): Date | null {
   if (!s) return null;
   const t = s.trim();
-  // dd.mm.yyyy
-  const dot = /^(\d{2})\.(\d{2})\.(\d{4})$/;
-  const iso = /^(\d{4})-(\d{2})-(\d{2})$/;
-  let y=0,m=0,d=0;
+  const iso = /^\d{4}-\d{2}-\d{2}$/;
+  const dot = /^\d{2}\.\d{2}\.\d{4}$/;
+  if (iso.test(t)) {
+    // Treat as local date (no time); normalize to local midnight
+    const [y, m, d] = t.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
   if (dot.test(t)) {
-    const mth = t.match(dot)!;
-    d = +mth[1]; m = +mth[2]; y = +mth[3];
-  } else if (iso.test(t)) {
-    const mth = t.match(iso)!;
-    y = +mth[1]; m = +mth[2]; d = +mth[3];
-  } else return null;
-  const dt = new Date(Date.UTC(y, m-1, d));
-  if (isNaN(+dt)) return null;
-  return dt;
-}
-function toISODate(d: Date): string {
-  return d.toISOString().slice(0,10);
+    const [d, m, y] = t.split('.').map(Number);
+    return new Date(y, m - 1, d);
+  }
+  return null;
 }
 
-export default function RangeCalculator({ className = "" }: { className?: string }) {
-  // default to current month
+export default function RangeCalculator() {
+  // Default: current month
   const now = new Date();
-  const yyyy = now.getUTCFullYear();
-  const mm = String(now.getUTCMonth() + 1).padStart(2, "0");
-  const startDefault = `01.${mm}.${yyyy}`;
-  const endDefault = `${String(new Date(Date.UTC(yyyy, now.getUTCMonth()+1, 0)).getUTCDate()).padStart(2,"0")}.${mm}.${yyyy}`;
+  const first = new Date(now.getFullYear(), now.getMonth(), 1);
+  const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
-  const [from, setFrom] = useState<string>(startDefault);
-  const [to, setTo] = useState<string>(endDefault);
-  const [mode, setMode] = useState<Mode>("rce");
+  const [fromStr, setFromStr] = useState<string>(toIsoDate(first));
+  const [toStr, setToStr] = useState<string>(toIsoDate(last));
+  const [mode, setMode] = useState<Mode>('rce');
   const [loading, setLoading] = useState(false);
-  const [sumKWh, setSumKWh] = useState<number | null>(null);
-  const [sumPLN, setSumPLN] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [sum, setSum] = useState<{ kwh: number; revenue: number } | null>(null);
 
-  const valid = useMemo(() => {
-    const f = parseDateLoose(from);
-    const t = parseDateLoose(to);
-    return !!f && !!t && (f.getTime() <= t.getTime());
-  }, [from, to]);
+  const from = useMemo(() => parseDateFlexible(fromStr), [fromStr]);
+  const to = useMemo(() => parseDateFlexible(toStr), [toStr]);
 
-  async function handleCompute() {
-    if (!valid || loading) return;
+  const valid = !!from && !!to && from.getTime() <= to.getTime();
+
+  async function compute() {
+    if (!valid) return;
+    setLoading(true);
+    setError(null);
+    setSum(null);
     try {
-      setLoading(true);
-      setError(null);
-      const fISO = toISODate(parseDateLoose(from)!);
-      const tISO = toISODate(parseDateLoose(to)!);
-      const url = `/api/range/compute?from=${fISO}&to=${tISO}&mode=${mode}`;
-      const res = await fetch(url, { cache: "no-store" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      if (!data || data.ok === false) {
-        throw new Error(data?.error || "Błąd przetwarzania zakresu");
+      const url = `/api/range/compute?from=${encodeURIComponent(toIsoDate(from!))}&to=${encodeURIComponent(toIsoDate(to!))}&mode=${mode}`;
+      const r = await fetch(url);
+      const j = await r.json();
+      if (!j.ok) {
+        throw new Error(j.error || 'Błąd liczenia');
       }
-      setSumKWh(Number(data.totals?.kwh ?? 0));
-      setSumPLN(Number(data.totals?.revenue_pln ?? 0));
-    } catch (e:any) {
+      setSum({ kwh: j.totals.kwh ?? 0, revenue: j.totals.revenue_pln ?? 0 });
+    } catch (e: any) {
       setError(e.message || String(e));
-      setSumKWh(null);
-      setSumPLN(null);
     } finally {
       setLoading(false);
     }
   }
 
-  return (
-    <div className={`pv-card pv-range ${className}`}>
-      <div className="pv-card-title">Kalkulator zakresu (sumy GENERATION i przychodu)</div>
+  useEffect(() => {
+    // optional: auto compute on mount
+  }, []);
 
-      <div className="pv-range-grid">
-        <label className="pv-input">
+  return (
+    <div className="pv-card pv-range">
+      <div className="pv-card__title">Kalkulator zakresu (sumy <b>GENERATION</b> i przychodu)</div>
+      <div className="pv-range__row">
+        <label className="pv-field">
           <span>Od</span>
           <input
-            type="text"
-            inputMode="numeric"
-            placeholder="DD.MM.RRRR lub YYYY-MM-DD"
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
+            type="date"
+            value={toIsoDate(from || first)}
+            onChange={(e) => setFromStr(e.target.value)}
+            className="pv-input"
           />
         </label>
-
-        <label className="pv-input">
+        <label className="pv-field">
           <span>Do</span>
           <input
-            type="text"
-            inputMode="numeric"
-            placeholder="DD.MM.RRRR lub YYYY-MM-DD"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
+            type="date"
+            value={toIsoDate(to || last)}
+            onChange={(e) => setToStr(e.target.value)}
+            className="pv-input"
           />
         </label>
-
-        <div className="pv-mode">
+        <div className="pv-field">
           <span>Tryb</span>
           <div className="pv-chip-group">
             <button
               type="button"
-              className={`pv-chip ${mode === "rce" ? "pv-chip--active" : ""}`}
-              onClick={() => setMode("rce")}
-              aria-pressed={mode === "rce"}
+              className={`pv-chip ${mode === 'rce' ? 'pv-chip--active' : ''}`}
+              onClick={() => setMode('rce')}
             >
               RCE
             </button>
             <button
               type="button"
-              className={`pv-chip ${mode === "rcem" ? "pv-chip--active" : ""}`}
-              onClick={() => setMode("rcem")}
-              aria-pressed={mode === "rcem"}
+              className={`pv-chip ${mode === 'rcem' ? 'pv-chip--active' : ''}`}
+              onClick={() => setMode('rcem')}
             >
               RCEm
             </button>
           </div>
         </div>
-
-        <div className="pv-actions">
+        <div className="pv-field pv-field--right">
+          <span>&nbsp;</span>
           <button
             type="button"
-            className="pv-btn pv-btn-primary"
+            onClick={compute}
             disabled={!valid || loading}
-            onClick={handleCompute}
-            aria-disabled={!valid || loading}
+            className="pv-btn pv-btn--primary"
+            title={!valid ? 'Ustaw poprawny zakres dat' : 'Oblicz'}
           >
-            {loading ? "Liczenie…" : "Oblicz"}
+            {loading ? 'Liczenie…' : 'Oblicz'}
           </button>
-          {!valid && (
-            <div className="pv-help">Podaj poprawny zakres dat (Od ≤ Do). Akceptujemy DD.MM.RRRR i YYYY-MM-DD.</div>
-          )}
-          {error && <div className="pv-error">Błąd: {error}</div>}
         </div>
       </div>
 
-      <div className="pv-range-summary">
-        <span>
-          Suma <strong>GENERATION</strong>:{" "}
-          <strong>{(sumKWh ?? 0).toLocaleString("pl-PL", { maximumFractionDigits: 2 })}</strong> kWh,
-        </span>{" "}
-        <span>
-          Suma przychodu:{" "}
-          <strong>
-            {(sumPLN ?? 0).toLocaleString("pl-PL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </strong>{" "}
-          PLN
-        </span>
+      {!valid && (
+        <div className="pv-note pv-note--warn">Niepoprawny zakres dat (Od ≤ Do).</div>
+      )}
+      {error && <div className="pv-note pv-note--error">{error}</div>}
+      <div className="pv-range__sum">
+        Suma <b>GENERATION</b>: <b>{(sum?.kwh ?? 0).toFixed(2)}</b> kWh,
+        &nbsp;Suma przychodu: <b>{(sum?.revenue ?? 0).toFixed(2)}</b> PLN
       </div>
     </div>
   );
