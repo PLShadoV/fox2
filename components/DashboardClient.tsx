@@ -67,7 +67,7 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <BarChartCard title={`Przychód na godzinę — ${date}`} data={hourly} xKey="x" yKey="revenue" formatter={(v)=> `${v} PLN`} />
+        <BarChartCard title={`Przychód na godzinę — ${date}`} data={hourly} xKey="x" yKey="revenue" suffix=" PLN" decimals={2} />
       </div>
 
       <div className="space-y-2">

@@ -1,3 +1,4 @@
+"use client";
 export default function HourlyRevenueTable({ rows }: { rows: Array<{hour:number;kwh:number;price_pln_mwh:number;price_used_pln_mwh:number;revenue_pln:number;}> }) {
   const totalKWh = rows.reduce((a,r)=>a+r.kwh,0);
   const totalPLN = rows.reduce((a,r)=>a+r.revenue_pln,0);
