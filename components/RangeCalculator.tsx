@@ -1,80 +1,157 @@
 
 "use client";
+
 import React, { useMemo, useState } from "react";
 
-function toIso(d: string) {
-  const ddmm = /^(\d{2})\.(\d{2})\.(\d{4})$/;
-  const ymd  = /^(\d{4})-(\d{2})-(\d{2})$/;
-  if (ddmm.test(d)) {
-    const [, dd, mm, yyyy] = d.match(ddmm)!;
-    return `${yyyy}-${mm}-${dd}`;
-  }
-  if (ymd.test(d)) return d;
-  const dt = new Date(d);
-  if (!isNaN(dt.getTime())) return dt.toISOString().slice(0,10);
-  return "";
+type Mode = "rce" | "rcem";
+
+function parseDateLoose(s: string): Date | null {
+  if (!s) return null;
+  const t = s.trim();
+  // dd.mm.yyyy
+  const dot = /^(\d{2})\.(\d{2})\.(\d{4})$/;
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/;
+  let y=0,m=0,d=0;
+  if (dot.test(t)) {
+    const mth = t.match(dot)!;
+    d = +mth[1]; m = +mth[2]; y = +mth[3];
+  } else if (iso.test(t)) {
+    const mth = t.match(iso)!;
+    y = +mth[1]; m = +mth[2]; d = +mth[3];
+  } else return null;
+  const dt = new Date(Date.UTC(y, m-1, d));
+  if (isNaN(+dt)) return null;
+  return dt;
+}
+function toISODate(d: Date): string {
+  return d.toISOString().slice(0,10);
 }
 
-export default function RangeCalculator() {
-  const [from, setFrom] = useState<string>("");
-  const [to, setTo] = useState<string>("");
-  const [mode, setMode] = useState<"rce"|"rcem">("rce");
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{kWh:number; revenue:number}>({kWh:0, revenue:0});
+export default function RangeCalculator({ className = "" }: { className?: string }) {
+  // default to current month
+  const now = new Date();
+  const yyyy = now.getUTCFullYear();
+  const mm = String(now.getUTCMonth() + 1).padStart(2, "0");
+  const startDefault = `01.${mm}.${yyyy}`;
+  const endDefault = `${String(new Date(Date.UTC(yyyy, now.getUTCMonth()+1, 0)).getUTCDate()).padStart(2,"0")}.${mm}.${yyyy}`;
 
-  const disabled = useMemo(() => !from || !to, [from, to]);
+  const [from, setFrom] = useState<string>(startDefault);
+  const [to, setTo] = useState<string>(endDefault);
+  const [mode, setMode] = useState<Mode>("rce");
+  const [loading, setLoading] = useState(false);
+  const [sumKWh, setSumKWh] = useState<number | null>(null);
+  const [sumPLN, setSumPLN] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const valid = useMemo(() => {
+    const f = parseDateLoose(from);
+    const t = parseDateLoose(to);
+    return !!f && !!t && (f.getTime() <= t.getTime());
+  }, [from, to]);
 
   async function handleCompute() {
-    const A = toIso(from);
-    const B = toIso(to);
-    if (!A || !B) return;
-    setLoading(true);
-    setResult({kWh:0, revenue:0});
+    if (!valid || loading) return;
     try {
-      const res = await fetch(`/api/range/compute?from=${encodeURIComponent(A)}&to=${encodeURIComponent(B)}&mode=${mode}`, { cache: "no-store" });
-      const j = await res.json();
-      if (j?.ok) {
-        setResult({ kWh: j.totals.kWh || 0, revenue: j.totals.revenuePLN || 0 });
-      } else {
-        console.error("range/compute error", j);
+      setLoading(true);
+      setError(null);
+      const fISO = toISODate(parseDateLoose(from)!);
+      const tISO = toISODate(parseDateLoose(to)!);
+      const url = `/api/range/compute?from=${fISO}&to=${tISO}&mode=${mode}`;
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (!data || data.ok === false) {
+        throw new Error(data?.error || "Błąd przetwarzania zakresu");
       }
-    } catch (e) {
-      console.error(e);
+      setSumKWh(Number(data.totals?.kwh ?? 0));
+      setSumPLN(Number(data.totals?.revenue_pln ?? 0));
+    } catch (e:any) {
+      setError(e.message || String(e));
+      setSumKWh(null);
+      setSumPLN(null);
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="pv-card pv-card--pad">
-      <div className="pv-row pv-row--gap">
-        <div className="pv-col">
-          <label className="pv-label">Od</label>
-          <input className="pv-input" placeholder="01.07.2025" value={from} onChange={e=>setFrom(e.target.value)} />
-        </div>
-        <div className="pv-col">
-          <label className="pv-label">Do</label>
-          <input className="pv-input" placeholder="31.07.2025" value={to} onChange={e=>setTo(e.target.value)} />
-        </div>
-        <div className="pv-col pv-col--mode">
-          <label className="pv-label">Tryb</label>
+    <div className={`pv-card pv-range ${className}`}>
+      <div className="pv-card-title">Kalkulator zakresu (sumy GENERATION i przychodu)</div>
+
+      <div className="pv-range-grid">
+        <label className="pv-input">
+          <span>Od</span>
+          <input
+            type="text"
+            inputMode="numeric"
+            placeholder="DD.MM.RRRR lub YYYY-MM-DD"
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+          />
+        </label>
+
+        <label className="pv-input">
+          <span>Do</span>
+          <input
+            type="text"
+            inputMode="numeric"
+            placeholder="DD.MM.RRRR lub YYYY-MM-DD"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+          />
+        </label>
+
+        <div className="pv-mode">
+          <span>Tryb</span>
           <div className="pv-chip-group">
-            <button className={`pv-chip ${mode==="rce"?"pv-chip--active":""}`} onClick={()=>setMode("rce")}>RCE</button>
-            <button className={`pv-chip ${mode==="rcem"?"pv-chip--active":""}`} onClick={()=>setMode("rcem")}>RCEm</button>
+            <button
+              type="button"
+              className={`pv-chip ${mode === "rce" ? "pv-chip--active" : ""}`}
+              onClick={() => setMode("rce")}
+              aria-pressed={mode === "rce"}
+            >
+              RCE
+            </button>
+            <button
+              type="button"
+              className={`pv-chip ${mode === "rcem" ? "pv-chip--active" : ""}`}
+              onClick={() => setMode("rcem")}
+              aria-pressed={mode === "rcem"}
+            >
+              RCEm
+            </button>
           </div>
         </div>
-        <div className="pv-col pv-col--action">
-          <button className="pv-btn" disabled={disabled||loading} onClick={handleCompute}>
-            {loading ? "Liczenie..." : "Oblicz"}
+
+        <div className="pv-actions">
+          <button
+            type="button"
+            className="pv-btn pv-btn-primary"
+            disabled={!valid || loading}
+            onClick={handleCompute}
+            aria-disabled={!valid || loading}
+          >
+            {loading ? "Liczenie…" : "Oblicz"}
           </button>
+          {!valid && (
+            <div className="pv-help">Podaj poprawny zakres dat (Od ≤ Do). Akceptujemy DD.MM.RRRR i YYYY-MM-DD.</div>
+          )}
+          {error && <div className="pv-error">Błąd: {error}</div>}
         </div>
       </div>
 
-      <div className="pv-result">
-        <span>Suma GENERATION:</span>&nbsp;
-        <strong>{result.kWh.toFixed(2)} kWh</strong>,&nbsp;
-        <span>Suma przychodu:</span>&nbsp;
-        <strong>{result.revenue.toFixed(2)} PLN</strong>
+      <div className="pv-range-summary">
+        <span>
+          Suma <strong>GENERATION</strong>:{" "}
+          <strong>{(sumKWh ?? 0).toLocaleString("pl-PL", { maximumFractionDigits: 2 })}</strong> kWh,
+        </span>{" "}
+        <span>
+          Suma przychodu:{" "}
+          <strong>
+            {(sumPLN ?? 0).toLocaleString("pl-PL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </strong>{" "}
+          PLN
+        </span>
       </div>
     </div>
   );
