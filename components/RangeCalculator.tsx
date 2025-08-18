@@ -1,56 +1,81 @@
-"use client";
-import { useState } from "react";
 
-async function getJSON(url: string){
-  const r = await fetch(url, { cache: "no-store" });
-  if (!r.ok) throw new Error(`Fetch ${url} failed: ${r.status}`);
-  return r.json();
+"use client";
+import React, { useMemo, useState } from "react";
+
+function toIso(d: string) {
+  const ddmm = /^(\d{2})\.(\d{2})\.(\d{4})$/;
+  const ymd  = /^(\d{4})-(\d{2})-(\d{2})$/;
+  if (ddmm.test(d)) {
+    const [, dd, mm, yyyy] = d.match(ddmm)!;
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  if (ymd.test(d)) return d;
+  const dt = new Date(d);
+  if (!isNaN(dt.getTime())) return dt.toISOString().slice(0,10);
+  return "";
 }
 
-export default function RangeCalculator(){
-  const today = new Date().toISOString().slice(0,10);
-  const monthStartD = new Date();
-  monthStartD.setDate(1);
-  const defaultFrom = monthStartD.toISOString().slice(0,10);
-
-  const [from, setFrom] = useState(defaultFrom);
-  const [to, setTo] = useState(today);
+export default function RangeCalculator() {
+  const [from, setFrom] = useState<string>("");
+  const [to, setTo] = useState<string>("");
   const [mode, setMode] = useState<"rce"|"rcem">("rce");
   const [loading, setLoading] = useState(false);
-  const [res, setRes] = useState<{kwh:number; pln:number} | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<{kWh:number; revenue:number}>({kWh:0, revenue:0});
 
-  const run = async ()=>{
-    try{
-      setLoading(true); setError(null);
-      const j = await getJSON(`/api/range/compute?from=${from}&to=${to}&mode=${mode}`);
-      setRes({ kwh: j?.kwh ?? 0, pln: j?.pln ?? 0 });
-    }catch(e:any){
-      setError(e.message);
-    }finally{ setLoading(false); }
-  };
+  const disabled = useMemo(() => !from || !to, [from, to]);
+
+  async function handleCompute() {
+    const A = toIso(from);
+    const B = toIso(to);
+    if (!A || !B) return;
+    setLoading(true);
+    setResult({kWh:0, revenue:0});
+    try {
+      const res = await fetch(`/api/range/compute?from=${encodeURIComponent(A)}&to=${encodeURIComponent(B)}&mode=${mode}`, { cache: "no-store" });
+      const j = await res.json();
+      if (j?.ok) {
+        setResult({ kWh: j.totals.kWh || 0, revenue: j.totals.revenuePLN || 0 });
+      } else {
+        console.error("range/compute error", j);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
-    <div className="p-5 rounded-2xl shadow-lg shadow-sky-100/40 bg-white/60 border border-white/40 backdrop-blur-xl space-y-3">
-      <div className="text-sm text-sky-900/70">Kalkulator zakresu (sumy GENERATION i przychodu)</div>
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="flex flex-col">
-          <label className="text-xs text-sky-900/70">Od</label>
-          <input type="date" value={from} onChange={e=> setFrom(e.target.value)} className="px-3 py-2 rounded-2xl bg-white/60 border border-white/30 backdrop-blur-xl shadow-sm glass-focus" />
+    <div className="pv-card pv-card--pad">
+      <div className="pv-row pv-row--gap">
+        <div className="pv-col">
+          <label className="pv-label">Od</label>
+          <input className="pv-input" placeholder="01.07.2025" value={from} onChange={e=>setFrom(e.target.value)} />
         </div>
-        <div className="flex flex-col">
-          <label className="text-xs text-sky-900/70">Do</label>
-          <input type="date" value={to} onChange={e=> setTo(e.target.value)} className="px-3 py-2 rounded-2xl bg-white/60 border border-white/30 backdrop-blur-xl shadow-sm glass-focus" />
+        <div className="pv-col">
+          <label className="pv-label">Do</label>
+          <input className="pv-input" placeholder="31.07.2025" value={to} onChange={e=>setTo(e.target.value)} />
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-sky-900/70">Tryb:</span>
-          <button onClick={()=> setMode("rce")} className={"px-3 py-2 rounded-2xl border " + (mode==="rce"?"bg-sky-500 text-white border-sky-500":"bg-white/60 border-white/30")}>RCE</button>
-          <button onClick={()=> setMode("rcem")} className={"px-3 py-2 rounded-2xl border " + (mode==="rcem"?"bg-sky-500 text-white border-sky-500":"bg-white/60 border-white/30")}>RCEm</button>
+        <div className="pv-col pv-col--mode">
+          <label className="pv-label">Tryb</label>
+          <div className="pv-chip-group">
+            <button className={`pv-chip ${mode==="rce"?"pv-chip--active":""}`} onClick={()=>setMode("rce")}>RCE</button>
+            <button className={`pv-chip ${mode==="rcem"?"pv-chip--active":""}`} onClick={()=>setMode("rcem")}>RCEm</button>
+          </div>
         </div>
-        <button onClick={run} disabled={loading} className="ml-auto px-4 py-2 rounded-2xl bg-sky-600 text-white shadow hover:bg-sky-700 disabled:opacity-50">Oblicz</button>
+        <div className="pv-col pv-col--action">
+          <button className="pv-btn" disabled={disabled||loading} onClick={handleCompute}>
+            {loading ? "Liczenie..." : "Oblicz"}
+          </button>
+        </div>
       </div>
-      {error ? <div className="text-amber-700 text-sm">{error}</div> : null}
-      {res ? <div className="text-sky-900 text-sm">Suma GENERATION: <b>{res.kwh.toFixed(1)} kWh</b>, Suma przychodu: <b>{res.pln.toFixed(2)} PLN</b></div> : null}
+
+      <div className="pv-result">
+        <span>Suma GENERATION:</span>&nbsp;
+        <strong>{result.kWh.toFixed(2)} kWh</strong>,&nbsp;
+        <span>Suma przychodu:</span>&nbsp;
+        <strong>{result.revenue.toFixed(2)} PLN</strong>
+      </div>
     </div>
   );
 }

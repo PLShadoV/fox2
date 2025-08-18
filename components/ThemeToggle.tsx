@@ -1,25 +1,30 @@
+
 "use client";
+import React, { useEffect, useState } from "react";
 
-import { useEffect, useState } from "react";
+export default function ThemeToggle() {
+  const [theme, setTheme] = useState<"light"|"dark">("dark");
 
-export default function ThemeToggle(){
-  const [theme, setTheme] = useState<"dark"|"light">("dark");
-
-  useEffect(()=>{
-    const saved = (localStorage.getItem("pv-theme") as "dark"|"light") || "dark";
-    setTheme(saved);
-    document.documentElement.classList.toggle("theme-light", saved === "light");
+  useEffect(() => {
+    const saved = window.localStorage.getItem("theme");
+    if (saved === "light" || saved === "dark") {
+      setTheme(saved as any);
+      document.documentElement.setAttribute("data-theme", saved);
+    } else {
+      setTheme("dark");
+      document.documentElement.setAttribute("data-theme", "dark");
+    }
   }, []);
 
-  function toggle(){
+  function toggle() {
     const next = theme === "dark" ? "light" : "dark";
     setTheme(next);
-    localStorage.setItem("pv-theme", next);
-    document.documentElement.classList.toggle("theme-light", next === "light");
+    document.documentElement.setAttribute("data-theme", next);
+    window.localStorage.setItem("theme", next);
   }
 
   return (
-    <button onClick={toggle} className="px-3 py-2 rounded-2xl bg-white/10 border border-white/15 text-slate-100 hover:bg-white/15 transition">
+    <button className="pv-chip" onClick={toggle}>
       {theme === "dark" ? "Jasny" : "Ciemny"}
     </button>
   );
