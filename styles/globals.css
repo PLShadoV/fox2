@@ -1,39 +1,39 @@
-/* Minimal glassmorphism helpers; merge into your global CSS */
 :root{
-  --pv-bg:#0c1521;
-  --pv-card: rgba(255,255,255,0.12);
-  --pv-card-br: 18px;
+  --pv-bg: #0f1722;
+  --pv-card: rgba(255,255,255,0.08);
   --pv-border: rgba(255,255,255,0.18);
-  --pv-text:#e8f1ff;
-  --pv-sub:#9db2cc;
-  --pv-accent:#37b6ff;
+  --pv-ink: #e7f0f7;
+  --pv-accent: #5ac8ff;
 }
-body{ background: var(--pv-bg); color: var(--pv-text); }
 
-.glass-wrap{ display:flex; flex-direction:column; gap:18px; }
-.glass-row{ display:grid; grid-template-columns: repeat(1,minmax(0,1fr)); gap:16px; }
-@media (min-width: 900px){ .glass-row{ grid-template-columns: repeat(3,minmax(0,1fr)); } }
+html, body { background: var(--pv-bg); color: var(--pv-ink); }
 
 .glass-tile{
-  border-radius: var(--pv-card-br);
-  background: var(--pv-card);
+  background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.06));
+  border: 1px solid var(--pv-border);
   backdrop-filter: blur(10px);
-  border: 1px solid var(--pv-border);
-  padding: 22px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05);
 }
-.glass-title{ font-size:14px; letter-spacing:.02em; color: var(--pv-sub); margin-bottom:8px; text-transform: none; }
-.glass-value{ font-size:40px; line-height:1.1; font-weight:700; color: var(--pv-text); }
-.glass-sub{ margin-top:6px; font-size:13px; color: var(--pv-sub); }
 
-.glass-toolbar{ display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
-.chip{
-  border-radius: 16px;
+.glass-panel{
+  background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.05));
   border: 1px solid var(--pv-border);
-  background: rgba(255,255,255,0.06);
-  color: var(--pv-text);
-  padding: 8px 14px;
+  backdrop-filter: blur(10px);
 }
-.chip.active{ background: var(--pv-accent); color:#031524; border-color: transparent; }
-.chipgrp{ display:flex; gap:8px; }
-input.chip{ color: var(--pv-text); }
+
+.chip{
+  border-radius: 9999px;
+  border: 1px solid var(--pv-border);
+  padding: 6px 12px;
+  background: rgba(255,255,255,.06);
+  transition: .15s ease;
+}
+.chip:hover{ background: rgba(255,255,255,.1); }
+.chip--active{ background: var(--pv-accent); color: #06121c; border-color: transparent; }
+
+.chip-input{
+  border-radius: 9999px;
+  border: 1px solid var(--pv-border);
+  padding: 6px 12px;
+  background: rgba(255,255,255,.06);
+  color: var(--pv-ink);
+}
