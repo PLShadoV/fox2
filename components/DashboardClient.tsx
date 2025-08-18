@@ -126,7 +126,13 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
   }, [genSeries, date, pvNowW]);
 
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-6">\n      {/* KPI ROW START */}\n      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">\n        <StatTile title="Moc teraz" value={`${(pvNowW??0)/1000 >= 0 ? ((pvNowW??0)/1000).toFixed(2) : "0.00"} kW`} />\n        <StatTile title="Wygenerowano (dzień)" value={`${genTotal.toFixed(1)} kWh`} />\n        <StatTile title={`Przychód (${mode.toUpperCase()})`} value={`${(revenue?.totals?.revenue_pln ?? totalRevenue).toFixed(2)} PLN`} />\n      </div>\n      {/* KPI ROW END */}
+    <div className="max-w-6xl mx-auto p-6 space-y-6">\n            {/* KPI ROW START */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <StatTile title="Moc teraz" value={`${(pvNowW??0)/1000 >= 0 ? ((pvNowW??0)/1000).toFixed(2) : "0.00"} kW`} />
+        <StatTile title="Wygenerowano (dzień)" value={`${genTotal.toFixed(1)} kWh`} />
+        <StatTile title="Przychód (dzień)" value={`${(revenue?.totals?.revenue_pln ?? totalRevenue).toFixed(2)} PLN`} />
+      </div>
+      {/* KPI ROW END */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <h1 className="text-2xl font-semibold tracking-tight pv-title">FoxESS × RCE</h1>
         <div className="flex items-center gap-2">
