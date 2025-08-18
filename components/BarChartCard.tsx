@@ -15,8 +15,8 @@ export default function BarChartCard({ title, data, xKey, yKey, suffix, decimals
     return n.toFixed(decimals) + (suffix ?? "");
   };
   return (
-    <div className="p-5 rounded-2xl shadow-sm bg-white/60 dark:bg-zinc-900/60 backdrop-blur border border-zinc-200/60 dark:border-zinc-800">
-      <div className="text-sm text-zinc-500 mb-2">{title}</div>
+    <div className="p-5 rounded-2xl shadow-lg shadow-sky-100/40 bg-white/60 border border-white/40 backdrop-blur-xl">
+      <div className="text-sm text-sky-900/70 mb-2">{title}</div>
       <div className="h-56">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data}>
@@ -24,7 +24,7 @@ export default function BarChartCard({ title, data, xKey, yKey, suffix, decimals
             <XAxis dataKey={xKey} />
             <YAxis />
             <Tooltip formatter={(val)=> fmt(val)} />
-            <Bar dataKey={yKey} />
+            <Bar dataKey={yKey} fill="#0ea5e9" radius={[8,8,0,0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>

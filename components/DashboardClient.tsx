@@ -13,6 +13,12 @@ async function getJSON(path: string){
   if (!res.ok) throw new Error(`Fetch ${path} failed: ${res.status}`);
   return res.json();
 }
+async function tryMany(paths: string[]){
+  for (const p of paths){
+    try { return await getJSON(p); } catch(e:any){ if (!String(e).includes("404")) throw e; }
+  }
+  throw new Error("All realtime endpoints 404");
+}
 
 export default function DashboardClient({ initialDate }: { initialDate: string }){
   const [date, setDate] = useState(initialDate);
@@ -22,17 +28,22 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
     rows: [], total: null
   });
   const [err, setErr] = useState<string| null>(null);
+  const [warn, setWarn] = useState<string| null>(null);
 
   const hourly = useMemo(()=> (revenue.rows || []).map(r=>({ x: String(r.hour).padStart(2,"0")+":00", revenue: r.revenue_pln })), [revenue.rows]);
 
   useEffect(()=>{
     let cancelled = false;
     setErr(null);
+    setWarn(null);
 
-    // 1) realtime
-    getJSON(`/api/foxess/realtime`)
-      .then(j => { if (!cancelled) setPvNowW(j?.pvNowW ?? null); })
-      .catch(e => { if (!cancelled) setErr(prev => prev || e.message); });
+    // 1) realtime with graceful 404 fallback
+    tryMany([
+      `/api/foxess/realtime`,
+      `/api/foxess?mode=realtime`,
+      `/api/foxess`
+    ]).then(j => { if (!cancelled) setPvNowW(j?.pvNowW ?? null); })
+      .catch(e => { if (!cancelled) setWarn("Brak endpointu realtime (404) – kafelek pokaże —"); });
 
     // 2) day summary
     getJSON(`/api/foxess/summary/day?date=${date}`)
@@ -50,13 +61,19 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">PV Dashboard</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-sky-900">PV Dashboard</h1>
         <RangeButtons />
       </div>
 
       {err ? (
-        <div className="p-3 rounded-xl border border-amber-300 bg-amber-50 text-amber-900 text-sm">
+        <div className="p-3 rounded-2xl border border-amber-300 bg-amber-50 text-amber-900 text-sm">
           Wystąpił błąd podczas pobierania danych: {err}
+        </div>
+      ) : null}
+
+      {warn ? (
+        <div className="p-3 rounded-2xl border border-sky-200 bg-sky-50 text-sky-800 text-xs">
+          {warn}
         </div>
       ) : null}
 
@@ -71,7 +88,7 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
       </div>
 
       <div className="space-y-2">
-        <div className="text-sm text-zinc-500">Tabela godzinowa (generation, cena RCE, przychód) — {date}</div>
+        <div className="text-sm text-sky-900/70">Tabela godzinowa (generation, cena RCE, przychód) — {date}</div>
         <HourlyRevenueTable rows={revenue.rows} />
       </div>
     </div>
