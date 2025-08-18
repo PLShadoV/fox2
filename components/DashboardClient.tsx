@@ -152,6 +152,11 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
         </div>
       </div>
 
+<<<<<<< HEAD
+=======
+      </div>
+
+>>>>>>> 4d3214ee1aaa28c021b6fb3dbdf1438192be29e4
 <PowerCurveCard title={`Moc [kW] — ${date}`} data={powerWave} xKey="x" yKey="kw" unit="kW" />
 
       <div className="space-y-2">
