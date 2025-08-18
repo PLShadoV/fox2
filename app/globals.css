@@ -8,20 +8,19 @@
   --bg2: 236 245 255;       /* very light blue */
 }
 
-html, body {
-  min-height: 100%;
-}
+html, body { min-height: 100%; }
 
 body {
   background: linear-gradient(180deg, rgb(var(--bg1)) 0%, rgb(var(--bg2)) 100%);
+  color: rgb(15 23 42 / 0.95); /* slate-900-ish */
 }
 
-/* Subtle focus style for glass buttons/inputs */
+/* Focus style for glass elements */
 .glass-focus:focus {
   outline: none;
   box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.25);
 }
 
-/* Optional scrollbar cosmetics */
+/* Scrollbar */
 ::-webkit-scrollbar { height: 10px; width: 10px; }
 ::-webkit-scrollbar-thumb { background: rgba(2,132,199,.25); border-radius: 8px; }

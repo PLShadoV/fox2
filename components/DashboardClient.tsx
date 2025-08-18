@@ -33,19 +33,19 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
   const [err, setErr] = useState<string| null>(null);
   const [warn, setWarn] = useState<string| null>(null);
 
-  // Keep DashboardClient in sync with URL (?date=...)
+  // Sync with URL (?date=...)
   useEffect(()=>{
     const d = sp.get("date") || initialDate || new Date().toISOString().slice(0,10);
     setDate(d);
   }, [sp, initialDate]);
 
-  // Fetch data when 'date' changes
+  // Fetch data on date change
   useEffect(()=>{
     let cancelled = false;
     setErr(null);
     setWarn(null);
 
-    // 1) realtime with graceful 404 fallback
+    // realtime (graceful if 404)
     tryMany([
       `/api/foxess/realtime`,
       `/api/foxess/realtime-now`,
@@ -56,7 +56,7 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
     ]).then(j => { if (!cancelled) setPvNowW(j?.pvNowW ?? null); })
       .catch(_ => { if (!cancelled) setWarn("Brak realtime (404) – kafelek pokaże —"); });
 
-    // 2) day summary (generation hourly + totals)
+    // day summary (generation totals + hourly series)
     getJSON(`/api/foxess/summary/day?date=${date}`)
       .then(j => {
         if (cancelled) return;
@@ -67,7 +67,7 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
       })
       .catch(e => { if (!cancelled) setErr(prev => prev || e.message); });
 
-    // 3) revenue table/tile
+    // revenue table/tile
     getJSON(`/api/revenue/day?date=${date}`)
       .then(j => { if (!cancelled) setRevenue({ rows: j?.rows || [], total: j?.totals?.revenue_pln ?? null }); })
       .catch(e => { if (!cancelled) setErr(prev => prev || e.message); });
@@ -75,7 +75,7 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
     return ()=> { cancelled = true; }
   }, [date]);
 
-  // Data for generation bar chart
+  // Bar chart data: hourly generation
   const genHourly = useMemo(()=> {
     const out = [];
     for (let h=0; h<24; h++){
