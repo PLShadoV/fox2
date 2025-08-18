@@ -39,13 +39,13 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
   const [err, setErr] = useState<string| null>(null);
   const lastPv = useRef<number|null>(null);
 
-  // Sync with URL (?date=...)
+  // Sync z ?date=
   useEffect(()=>{
     const d = sp.get("date") || initialDate || new Date().toISOString().slice(0,10);
     setDate(d);
   }, [sp, initialDate]);
 
-  // Realtime – poll co 60 s, zachowuj ostatnią wartość przy błędzie
+  // Realtime co 60s z zachowaniem ostatniej wartości
   useEffect(()=>{
     let alive = true;
     const fetchOnce = async ()=>{
@@ -70,7 +70,7 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
     return ()=> { alive = false; clearInterval(t); };
   }, []);
 
-  // Dzień: summary + revenue (z cache'owanych endpointów)
+  // Dzień – dane bazowe
   useEffect(()=>{
     let cancelled = false;
     setErr(null);
@@ -92,8 +92,12 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
     return ()=> { cancelled = true; }
   }, [date, calcMode]);
 
-  // Krzywa mocy (kW): z godzinowych kWh -> średnia moc w danej godzinie.
-  // Dla dnia "dziś" ucinamy do teraz; ostatni punkt bierzemy z realtime jeśli jest dostępny.
+  // Easing (płynne przejścia w obrębie godziny)
+  function easeInOutCubic(t:number){
+    return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3)/2;
+  }
+
+  // Krzywa mocy kW – gładkie 5-min kroki z interpolacją od poprzedniej do bieżącej godziny
   const powerWave = useMemo(()=>{
     const today = new Date().toISOString().slice(0,10);
     const isToday = date === today;
@@ -102,23 +106,23 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
     const pts: {x:string, kw:number}[] = [];
 
     for (let h=0; h<24; h++){
-      const kwh = Number(genSeries[h] ?? 0);
-      const avgkW = kwh; // 1 kWh / 1h => 1 kW
+      const prev = h>0 ? Number(genSeries[h-1] ?? 0) : 0;
+      const cur  = Number(genSeries[h] ?? 0);
       const steps = 12; // co 5 min
       for (let s=0; s<steps; s++){
         const minute = h*60 + s*5;
         if (isToday && minute > nowMin) break;
+        const t = (s+1)/steps; // postęp w obrębie godziny
+        const val = prev + (cur - prev) * easeInOutCubic(t);
         const hh = String(h).padStart(2,"0");
         const mm = String(s*5).padStart(2,"0");
-        pts.push({ x: `${hh}:${mm}`, kw: avgkW });
+        pts.push({ x: `${hh}:${mm}`, kw: Math.max(0, val) });
       }
     }
-    // Podmień ostatni punkt na realtime (jeśli jest)
-    if (isToday && pts.length){
+    // Docięcie ostatniego punktu do realtime jeśli dziś
+    if (isToday && pts.length && pvNowW != null){
       const lastIdx = pts.length - 1;
-      if (pvNowW != null){
-        pts[lastIdx] = { x: pts[lastIdx].x, kw: Math.max(0, pvNowW/1000) };
-      }
+      pts[lastIdx] = { x: pts[lastIdx].x, kw: Math.max(0, pvNowW/1000) };
     }
     return pts;
   }, [genSeries, date, pvNowW]);
