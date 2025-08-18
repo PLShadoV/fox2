@@ -40,6 +40,12 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
   const [err, setErr] = useState<string| null>(null);
   const lastPv = useRef<number|null>(null);
 
+  // Łączny przychód dla dnia — z API albo sumowany lokalnie z wierszy
+  const revenueTotal = useMemo(()=> {
+    if (revenue && typeof revenue.total === 'number' && isFinite(revenue.total)) return revenue.total;
+    try { return (revenue?.rows || []).reduce((a,r)=> a + (Number(r?.revenue_pln)||0), 0); } catch { return 0; }
+  }, [revenue]);
+
   // Sync z ?date=
   useEffect(()=>{
     const d = sp.get("date") || initialDate || new Date().toISOString().slice(0,10);
@@ -130,7 +136,7 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <StatTile title="Moc teraz" value={`${(pvNowW??0)/1000 >= 0 ? ((pvNowW??0)/1000).toFixed(2) : "0.00"} kW`} />
         <StatTile title="Wygenerowano (dzień)" value={`${genTotal.toFixed(1)} kWh`} />
-        <StatTile title="Przychód (dzień)" value={`${((revenue?.total ?? totalRevenue) ?? 0).toFixed(2)} PLN`} />
+        <StatTile title="Przychód (dzień)" value={`${(revenueTotal ?? 0).toFixed(2)} PLN`} />
       </div>
       {/* KPI ROW END */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
