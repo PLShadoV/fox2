@@ -14,11 +14,22 @@ async function getJSON(path: string){
   if (!res.ok) throw new Error(`Fetch ${path} failed: ${res.status}`);
   return res.json();
 }
-async function tryMany(paths: string[]){
+
+// Try many endpoints; pick the first that returns a NON-null pvNowW
+async function tryManyRealtime(paths: string[]){
+  let last404 = false;
   for (const p of paths){
-    try { return await getJSON(p); } catch(e:any){ if (!String(e).includes("404")) throw e; }
+    try {
+      const j = await getJSON(p);
+      if (j && j.pvNowW != null) return j;
+    } catch(e:any){
+      const is404 = /404/.test(String(e));
+      last404 = last404 || is404;
+      if (!is404) throw e;
+    }
   }
-  throw new Error("All realtime endpoints 404");
+  if (last404) throw new Error("Realtime endpoint not found (404)");
+  throw new Error("Realtime data unavailable");
 }
 
 export default function DashboardClient({ initialDate }: { initialDate: string }){
@@ -33,30 +44,25 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
   const [err, setErr] = useState<string| null>(null);
   const [warn, setWarn] = useState<string| null>(null);
 
-  // Sync with URL (?date=...)
   useEffect(()=>{
     const d = sp.get("date") || initialDate || new Date().toISOString().slice(0,10);
     setDate(d);
   }, [sp, initialDate]);
 
-  // Fetch data on date change
   useEffect(()=>{
     let cancelled = false;
     setErr(null);
     setWarn(null);
 
-    // realtime (graceful if 404)
-    tryMany([
+    tryManyRealtime([
       `/api/foxess/realtime`,
-      `/api/foxess/realtime-now`,
       `/api/foxess?mode=realtime`,
       `/api/foxess`,
       `/api/foxess/debug/realtime`,
       `/api/foxess/debug/realtime-now`
     ]).then(j => { if (!cancelled) setPvNowW(j?.pvNowW ?? null); })
-      .catch(_ => { if (!cancelled) setWarn("Brak realtime (404) – kafelek pokaże —"); });
+      .catch(_ => { if (!cancelled) setWarn("Brak realtime – kafelek pokaże —"); });
 
-    // day summary (generation totals + hourly series)
     getJSON(`/api/foxess/summary/day?date=${date}`)
       .then(j => {
         if (cancelled) return;
@@ -67,7 +73,6 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
       })
       .catch(e => { if (!cancelled) setErr(prev => prev || e.message); });
 
-    // revenue table/tile
     getJSON(`/api/revenue/day?date=${date}`)
       .then(j => { if (!cancelled) setRevenue({ rows: j?.rows || [], total: j?.totals?.revenue_pln ?? null }); })
       .catch(e => { if (!cancelled) setErr(prev => prev || e.message); });
@@ -75,7 +80,6 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
     return ()=> { cancelled = true; }
   }, [date]);
 
-  // Bar chart data: hourly generation
   const genHourly = useMemo(()=> {
     const out = [];
     for (let h=0; h<24; h++){

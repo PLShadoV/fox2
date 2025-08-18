@@ -1,12 +1,9 @@
 import { NextResponse } from "next/server";
-
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  // Optional: allow overriding realtime source from env
-  const url = process.env.FOXESS_REALTIME_URL;
   const candidates = [
-    url,
+    process.env.FOXESS_REALTIME_URL,
     "/api/foxess?mode=realtime",
     "/api/foxess",
     "/api/foxess/debug/realtime",
@@ -18,10 +15,11 @@ export async function GET() {
       const r = await fetch(c, { cache:"no-store" });
       if (r.ok) {
         const j = await r.json();
-        return NextResponse.json(j);
+        if (j && j.pvNowW != null) return NextResponse.json(j);
+        // otherwise continue trying other candidates
       }
     } catch {}
   }
-  // Friendly fallback – avoid 404 to keep UI calm; return null pv
-  return NextResponse.json({ pvNowW: null, ok: true }, { status: 200 });
+  // Return 404 so the client tryMany continues to other paths
+  return NextResponse.json({ ok:false, pvNowW:null }, { status: 404 });
 }
