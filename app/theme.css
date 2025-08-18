@@ -56,3 +56,38 @@ html, body { background: var(--pv-bg); color: var(--pv-text); }
 }
 .pv-chip:focus { outline: 2px solid rgba(56,189,248,.35); outline-offset: 2px; }
 .glass-focus:focus { outline: 2px solid rgba(14,165,233,0.35); outline-offset: 2px; border-radius: 1rem; }
+
+
+/* Glass cards & KPI tiles */
+.pv-card {
+  background: var(--pv-card);
+  border: 1px solid var(--pv-border);
+  border-radius: 1rem;
+  padding: 1rem;
+  box-shadow: 0 10px 30px rgba(2,6,23,0.25);
+  color: var(--pv-text);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.pv-card--glass {
+  background: linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.06));
+}
+
+.pv-stat {
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+  padding: 1.25rem 1.5rem;
+}
+.pv-stat-title {
+  font-size: .75rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  opacity: .8;
+}
+.pv-stat-value {
+  font-weight: 700;
+  font-size: clamp(1.75rem, 3vw, 2.5rem);
+  line-height: 1.1;
+  color: var(--pv-heading);
+}
