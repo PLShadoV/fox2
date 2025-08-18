@@ -1,19 +1,58 @@
 :root {
   --pv-bg: #0b1220;
   --pv-card: rgba(255,255,255,0.06);
-  --pv-border: rgba(255,255,255,0.10);
+  --pv-border: rgba(255,255,255,0.12);
   --pv-text: #cbd5e1;
   --pv-heading: #e2e8f0;
+
+  --pv-chip-bg: rgba(255,255,255,0.10);
+  --pv-chip-text: #e2e8f0;
+  --pv-chip-border: rgba(255,255,255,0.18);
+  --pv-chip-bg-hover: rgba(255,255,255,0.18);
+
+  --pv-chip-active-bg: #38bdf8;
+  --pv-chip-active-text: #081018;
+  --pv-chip-active-border: #38bdf8;
 }
 :root.theme-light {
   --pv-bg: #f6f9ff;
-  --pv-card: rgba(255,255,255,0.8);
-  --pv-border: rgba(15,23,42,0.08);
+  --pv-card: rgba(255,255,255,0.92);
+  --pv-border: rgba(15,23,42,0.10);
   --pv-text: #0f172a;
   --pv-heading: #0b1220;
+
+  --pv-chip-bg: rgba(2, 6, 23, 0.06);
+  --pv-chip-text: #0f172a;
+  --pv-chip-border: rgba(2, 6, 23, 0.20);
+  --pv-chip-bg-hover: rgba(2, 6, 23, 0.10);
+
+  --pv-chip-active-bg: #075985;
+  --pv-chip-active-text: #ffffff;
+  --pv-chip-active-border: #075985;
 }
 
 html, body { background: var(--pv-bg); color: var(--pv-text); }
 .pv-card { background: var(--pv-card); border: 1px solid var(--pv-border); border-radius: 1rem; }
 .pv-title { color: var(--pv-heading); }
+
+/* chips / buttons */
+.pv-chip {
+  background: var(--pv-chip-bg);
+  color: var(--pv-chip-text);
+  border: 1px solid var(--pv-chip-border);
+  border-radius: 9999px;
+  padding: .5rem 1rem;
+  transition: background .2s ease, color .2s ease, border-color .2s ease, box-shadow .2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: .375rem;
+  box-shadow: 0 1px 0 rgba(0,0,0,.04);
+}
+.pv-chip:hover { background: var(--pv-chip-bg-hover); }
+.pv-chip--active {
+  background: var(--pv-chip-active-bg);
+  color: var(--pv-chip-active-text);
+  border-color: var(--pv-chip-active-border);
+}
+.pv-chip:focus { outline: 2px solid rgba(56,189,248,.35); outline-offset: 2px; }
 .glass-focus:focus { outline: 2px solid rgba(14,165,233,0.35); outline-offset: 2px; border-radius: 1rem; }

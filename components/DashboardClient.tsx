@@ -93,12 +93,10 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
     return ()=> { cancelled = true; }
   }, [date, calcMode]);
 
-  // Easing
   function easeInOutCubic(t:number){
     return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3)/2;
   }
 
-  // Krzywa mocy kW – co 5 min, interpolacja
   const powerWave = useMemo(()=>{
     const today = new Date().toISOString().slice(0,10);
     const isToday = date === today;
@@ -132,10 +130,10 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <h1 className="text-2xl font-semibold tracking-tight pv-title">FoxESS × RCE</h1>
         <div className="flex items-center gap-2">
-          <a href="https://www.foxesscloud.com" target="_blank" className="px-3 py-2 rounded-2xl bg-white/10 border border-white/15 text-slate-100 hover:bg-white/15 transition glass-focus">FoxESS</a>
-          <a href="https://raporty.pse.pl/report/rce-pln" target="_blank" className="px-3 py-2 rounded-2xl bg-white/10 border border-white/15 text-slate-100 hover:bg-white/15 transition glass-focus">RCE (PSE)</a>
+          <a href="https://www.foxesscloud.com" target="_blank" className="pv-chip">FoxESS</a>
+          <a href="https://raporty.pse.pl/report/rce-pln" target="_blank" className="pv-chip">RCE (PSE)</a>
           <ThemeToggle />
-          <RangeButtons />
+          <RangeButtons chipClass="pv-chip" activeClass="pv-chip--active" />
         </div>
       </div>
 
@@ -148,8 +146,8 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
           <StatTile label="Przychód (dzień)" value={revenue.total != null ? `${revenue.total.toFixed(2)} PLN` : "—"} sub={calcMode === "rce" ? "RCE godzinowe" : "RCEm (średnia mies.)"} />
           <div className="self-end flex items-center gap-2 text-xs opacity-80">
             Tryb obliczeń:
-            <button onClick={()=> setCalcMode("rce")} className={"px-3 py-1 rounded-xl border " + (calcMode==="rce" ? "bg-sky-500 text-white border-sky-500" : "bg-white/10 border-white/15 text-slate-100")}>RCE</button>
-            <button onClick={()=> setCalcMode("rcem")} className={"px-3 py-1 rounded-xl border " + (calcMode==="rcem" ? "bg-sky-500 text-white border-sky-500" : "bg-white/10 border-white/15 text-slate-100")}>RCEm</button>
+            <button onClick={()=> setCalcMode("rce")} className={"pv-chip " + (calcMode==="rce" ? "pv-chip--active" : "")}>RCE</button>
+            <button onClick={()=> setCalcMode("rcem")} className={"pv-chip " + (calcMode==="rcem" ? "pv-chip--active" : "")}>RCEm</button>
           </div>
         </div>
       </div>
