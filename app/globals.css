@@ -1,26 +1,65 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-/* Light / blue gradient background */
-:root {
-  --bg1: 255 255 255;       /* white */
-  --bg2: 236 245 255;       /* very light blue */
+/* app/globals.css – wariant z motywami. Jeśli masz własny plik, możesz wkleić blok :root + klasy pv-* na koniec. */
+:root[data-theme="dark"]{
+  --bg: #0f1823;
+  --panel: #2a3a4e;
+  --panel-2: #33465f;
+  --text: #e8f0f6;
+  --muted: #c7d2e1;
+  --brand: #2db5ff;
+  --good: #26d07c;
+  --chip-bg: #0f1823;
+  --chip-border: #4e6a8c;
+  --shadow: 0 12px 24px rgba(0,0,0,.35);
+}
+:root[data-theme="light"]{
+  --bg: #f3f7fb;
+  --panel: #eef3f8;
+  --panel-2: #e5edf6;
+  --text: #0b2540;
+  --muted: #3b556e;
+  --brand: #1d8fd6;
+  --good: #129f5e;
+  --chip-bg: #fff;
+  --chip-border: #b7c6d6;
+  --shadow: 0 8px 18px rgba(10,40,70,.15);
 }
 
-html, body { min-height: 100%; }
-
-body {
-  background: linear-gradient(180deg, rgb(var(--bg1)) 0%, rgb(var(--bg2)) 100%);
-  color: rgb(15 23 42 / 0.95); /* slate-900-ish */
+html, body {
+  background: var(--bg);
+  color: var(--text);
 }
 
-/* Focus style for glass elements */
-.glass-focus:focus {
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.25);
+/* kafle */
+.pv-card{
+  background: linear-gradient(180deg, var(--panel), var(--panel-2));
+  border-radius: 18px;
+  padding: 22px 26px;
+  box-shadow: var(--shadow);
+}
+.pv-card h3{ font-size:14px; opacity:.8; margin:0 0 8px; }
+.pv-card .pv-value{ font-size:38px; font-weight:700; letter-spacing:.3px; }
+
+/* chips */
+.pv-chip{
+  background: var(--chip-bg);
+  border: 1px solid var(--chip-border);
+  color: var(--text);
+  padding: 10px 16px;
+  border-radius: 18px;
+  line-height: 1;
+}
+.pv-chip--active{
+  background: var(--brand);
+  border-color: var(--brand);
+  color: white;
 }
 
-/* Scrollbar */
-::-webkit-scrollbar { height: 10px; width: 10px; }
-::-webkit-scrollbar-thumb { background: rgba(2,132,199,.25); border-radius: 8px; }
+/* tabela – lepszy kontrast */
+.pv-table{
+  background: linear-gradient(180deg, var(--panel), var(--panel-2));
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+}
+.pv-table th, .pv-table td{
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}

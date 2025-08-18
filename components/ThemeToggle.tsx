@@ -1,44 +1,45 @@
-'use client';
+// components/ThemeToggle.tsx
+"use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
 
-/**
- * Simple theme toggle that stores preference in localStorage
- * and applies `data-theme="dark|light"` on <html>. Default = dark.
- */
+const KEY = "pv-theme"; // "dark" | "light"
+
+function applyTheme(t: "dark" | "light") {
+  const el = document.documentElement;
+  el.dataset.theme = t;
+  try { localStorage.setItem(KEY, t); } catch {}
+}
+
 export default function ThemeToggle() {
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
 
   useEffect(() => {
-    // Load pref
-    const saved = typeof window !== 'undefined' ? (localStorage.getItem('pv.theme') as 'dark' | 'light' | null) : null;
-    const initial = saved ?? 'dark';
-    setTheme(initial);
-    if (typeof document !== 'undefined') {
-      document.documentElement.setAttribute('data-theme', initial);
-    }
+    // domyślnie ciemny
+    let t: "dark" | "light" = "dark";
+    try {
+      const saved = localStorage.getItem(KEY) as "dark" | "light" | null;
+      if (saved === "light" || saved === "dark") t = saved;
+    } catch {}
+    setTheme(t);
+    applyTheme(t);
   }, []);
 
-  const toggle = () => {
-    const next = theme === 'dark' ? 'light' : 'dark';
-    setTheme(next);
-    if (typeof document !== 'undefined') {
-      document.documentElement.setAttribute('data-theme', next);
-    }
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('pv.theme', next);
-    }
+  const flip = () => {
+    const t = theme === "dark" ? "light" : "dark";
+    setTheme(t);
+    applyTheme(t);
   };
 
   return (
     <button
-      type="button"
+      onClick={flip}
+      className="pv-chip"
       aria-label="Przełącz motyw"
-      onClick={toggle}
-      className={`pv-chip ${theme === 'dark' ? 'pv-chip--active' : ''}`}
-      title={theme === 'dark' ? 'Ciemny (aktywny)' : 'Jasny (kliknij aby przełączyć)'}
+      title="Przełącz motyw"
+      type="button"
     >
-      {theme === 'dark' ? 'Ciemny' : 'Jasny'}
+      {theme === "dark" ? "Jasny" : "Ciemny"}
     </button>
   );
 }
