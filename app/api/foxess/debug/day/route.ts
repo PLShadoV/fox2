@@ -13,17 +13,17 @@ export async function GET(req: NextRequest){
     const [y,m,d] = date.split("-").map(Number);
 
     const rep = await foxReportQuery({ sn, year: y, month: m, day: d, dimension: "day", variables: [...EXPORT_VARS, ...GEN_VARS] });
-    const sample = rep.slice(0, 3);
+    const sample = Array.isArray(rep) ? (rep as any[]).slice(0, 3) : [];
 
-    // pick matches by non-zero sum
-    const sum = (a:number[])=> a.reduce((x,y)=>x+y,0);
-    const findFirst = (names:string[]) => {
-      for (const n of names){
-        const item = rep.find(r => r.variable.toLowerCase().includes(n.toLowerCase()));
-        if (item && sum(item.values) > 0) return item.variable;
+    function findFirst(names:string[]){
+      if (!Array.isArray(rep)) return null;
+      const lc = names.map(s=>s.toLowerCase());
+      for (const it of rep){
+        const v = String((it as any).variable || (it as any).name || "").toLowerCase();
+        if (lc.includes(v)) return it;
       }
       return null;
-    };
+    }
 
     return NextResponse.json({
       ok:true,

@@ -152,7 +152,7 @@ export default function DashboardClient({ initialDate }: { initialDate: string }
         </div>
       </div>
 
-      <PowerCurveCard title={`Moc [kW] — ${date}`} data={powerWave} xKey="x" yKey="kw" unit="kW" />
+<PowerCurveCard title={`Moc [kW] — ${date}`} data={powerWave} xKey="x" yKey="kw" unit="kW" />
 
       <div className="space-y-2">
         <div className="text-sm opacity-80">Tabela godzinowa (generation, cena RCE/RCEm, przychód) — {date}</div>
