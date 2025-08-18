@@ -1,74 +1,57 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
-export const dynamic = "force-dynamic";
+const MONTHS = [
+  "styczeń","styczen","luty","marzec","kwiecień","kwiecien","maj","czerwiec","lipiec",
+  "sierpień","sierpien","wrzesień","wrzesien","październik","pazdziernik","listopad","grudzień","grudzien"
+];
 
-type Cache = { ts:number; value:any };
-const LONG_TTL = 6 * 60 * 60 * 1000; // 6h
-let cache: Cache | null = null;
+function norm(txt:string){
+  return txt.toLowerCase()
+    .replaceAll("&nbsp;"," ")
+    .replaceAll("\u00a0"," ")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, ""); // remove diacritics
+}
 
-function parseRCEmFromHtml(html:string){
-  const rows: { month:string; rcem_pln_mwh:number }[] = [];
-  // Wzorce z przecinkami/kropkami i różnymi separatorami
-  const re = /(\d{4})\s*[-./]\s*(\d{1,2})[^0-9]{0,40}?([\d\s.,]+)\s*PLN\/MWh/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(html))){
-    const y = m[1];
-    const mm = m[2].padStart(2,"0");
-    const num = Number(m[3].replace(/\s/g,"").replace(",", "."));
-    if (Number.isFinite(num)){
-      rows.push({ month: `${y}-${mm}`, rcem_pln_mwh: num });
+function parseRCEm(html:string){
+  const out:{label:string, value:number|null}[] = [];
+  const plain = norm(html);
+
+  for (const m of MONTHS){
+    const reM = new RegExp(`\\b${m}\\b`, "g");
+    let match;
+    while ((match = reM.exec(plain))){
+      const start = match.index;
+      const window = plain.slice(start, start+900);
+      const idx = window.indexOf("rcem");
+      if (idx === -1) continue;
+      const after = window.slice(idx, idx+260);
+      const numMatch = after.match(/(\d{1,4}(?:[.,]\d{2}))/);
+      if (numMatch){
+        const raw = numMatch[1].replace(",", ".");
+        const val = Number(raw);
+        if (!Number.isNaN(val)){
+          const label = m.replace("pazdziernik","październik").replace("kwiecien","kwiecień").replace("styczen","styczeń").replace("sierpien","sierpień").replace("wrzesien","wrzesień").replace("grudzien","grudzień");
+          if (!out.find(x => x.label === label)) out.push({ label, value: val });
+        }
+      }
     }
   }
-  // deduplikacja + sort
-  const map = new Map<string,number>();
-  for (const r of rows) if (!map.has(r.month)) map.set(r.month, r.rcem_pln_mwh);
-  const dedup = Array.from(map.entries()).map(([month, rcem_pln_mwh]) => ({ month, rcem_pln_mwh }));
-  dedup.sort((a,b)=> b.month.localeCompare(a.month));
-  return dedup;
+  return out;
 }
 
-async function computeMonthAvgFromRCE(origin:string, ym:string){
-  const r = await fetch(`${origin}/api/rce/month-avg?date=${ym}-01`, { cache: "no-store" as any });
-  if (!r.ok) return null;
-  const j = await r.json();
-  const v = Number(j?.rcem_pln_mwh ?? j?.avg ?? 0);
-  if (!Number.isFinite(v) || v<=0) return null;
-  return { month: ym.slice(0,7), rcem_pln_mwh: Number(v.toFixed(2)) };
-}
-
-export async function GET(req: NextRequest){
-  const url = new URL(req.url);
-  const origin = url.origin;
-  const now = Date.now();
-  if (cache && (now - cache.ts) < LONG_TTL) return NextResponse.json(cache.value);
-
-  let rows: {month:string; rcem_pln_mwh:number}[] = [];
-  let note: string | undefined = undefined;
-
-  // 1) parsowanie PSE
+export async function GET(){
   try{
-    const page = await fetch("https://www.pse.pl/oire/rcem-rynkowa-miesieczna-cena-energii-elektrycznej", { cache: "no-store" as any });
-    if (page.ok){
-      const html = await page.text();
-      rows = parseRCEmFromHtml(html);
+    const url = "https://www.pse.pl/oire/rcem-rynkowa-miesieczna-cena-energii-elektrycznej";
+    const res = await fetch(url, { next: { revalidate: 21600 } }); // 6h
+    if (!res.ok){
+      return NextResponse.json({ ok:false, source:"pse", status:res.status }, { status: 200 });
     }
-  }catch{ /* ignore */}
-
-  // 2) fallback: policz średnie miesiące (ostatnie 12)
-  if (rows.length === 0){
-    note = "Brak danych z PSE – pokazuję średnie miesięczne wyliczone z godzinowego RCE.";
-    const base = new Date();
-    const out: {month:string; rcem_pln_mwh:number}[] = [];
-    for (let i=0;i<12;i++){
-      const d = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth()-i, 1));
-      const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,"0")}`;
-      const v = await computeMonthAvgFromRCE(origin, ym);
-      if (v) out.push(v);
-    }
-    rows = out;
+    const html = await res.text();
+    const parsed = parseRCEm(html);
+    const order = ["styczeń","luty","marzec","kwiecień","maj","czerwiec","lipiec","sierpień","wrzesień","październik","listopad","grudzień"];
+    parsed.sort((a,b)=> order.indexOf(a.label) - order.indexOf(b.label));
+    return NextResponse.json({ ok:true, source:"pse", items: parsed });
+  }catch(e:any){
+    return NextResponse.json({ ok:false, error: e?.message || String(e) }, { status: 200 });
   }
-
-  const payload = { ok:true, rows, note };
-  cache = { ts: now, value: payload };
-  return NextResponse.json(payload);
 }

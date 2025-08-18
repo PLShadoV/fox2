@@ -1,49 +1,65 @@
 "use client";
+
 import { useEffect, useState } from "react";
 
-type Row = { month: string; rcem_pln_mwh: number };
-type Resp = { ok:boolean; rows: Row[]; note?: string; error?: string };
+type Item = { label: string; value: number|null };
 
 export default function MonthlyRCEmTable(){
-  const [rows, setRows] = useState<Row[]>([]);
-  const [err, setErr] = useState<string|null>(null);
-  const [note, setNote] = useState<string|undefined>(undefined);
+  const [items, setItems] = useState<Item[]>([]);
+  const [note, setNote] = useState<string>("");
+  const [loading, setLoading] = useState(false);
 
   useEffect(()=>{
+    let cancelled = false;
+    setLoading(true);
     fetch("/api/rcem", { cache: "no-store" })
       .then(r => r.json())
-      .then((j:Resp) => {
-        setRows(Array.isArray(j?.rows) ? j.rows : []);
-        setNote(j?.note);
+      .then(async j => {
+        if (cancelled) return;
+        if (j?.ok && Array.isArray(j.items) && j.items.length){
+          setItems(j.items);
+          setNote("Źródło: PSE (RCEm – miesięczna).");
+        } else {
+          const r = await fetch("/api/rce/month-avg", { cache: "no-store" });
+          const jj = await r.json();
+          const rows = (jj?.items || []).map((x:any)=>({label: x.month, value: x.value}));
+          setItems(rows);
+          setNote("Brak danych z PSE – pokazuję średnie miesięczne z godzinowego RCE (fallback).");
+        }
       })
-      .catch(e => setErr(String(e)));
+      .catch(()=>{
+        setNote("Nie udało się pobrać RCEm.");
+      })
+      .finally(()=> setLoading(false));
+    return ()=> { cancelled = true; };
   }, []);
 
   return (
-    <div className="p-5 rounded-2xl shadow-lg shadow-sky-100/40 bg-white/60 border border-white/40 backdrop-blur-xl">
-      <div className="text-sm text-sky-900/70 mb-3">RCEm – miesięczne ceny (PSE / średnie z RCE)</div>
-      {err ? <div className="text-amber-700 text-sm">{err}</div> : null}
+    <div className="pv-card p-5">
+      <div className="mb-3 pv-title font-medium">RCEm – miesięczne ceny (PLN/MWh)</div>
       <div className="overflow-x-auto">
-        <table className="min-w-[400px] text-sm">
-          <thead>
-            <tr className="text-left text-sky-900/70">
-              <th className="py-1 pr-4">Miesiąc</th>
-              <th className="py-1">RCEm (PLN/MWh)</th>
+        <table className="min-w-[420px] w-full text-sm">
+          <thead className="opacity-80">
+            <tr>
+              <th className="text-left py-2 pr-4 font-normal">Miesiąc</th>
+              <th className="text-right py-2 font-normal">RCEm (PLN/MWh)</th>
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 ? (
-              <tr className="border-t border-sky-100/60"><td className="py-2" colSpan={2}>Brak danych (spróbuj później).</td></tr>
-            ) : rows.map((r, i) => (
-              <tr key={i} className="border-t border-sky-100/60">
-                <td className="py-1 pr-4">{r.month}</td>
-                <td className="py-1">{Number(r.rcem_pln_mwh).toFixed(2)}</td>
+            {loading ? (
+              <tr><td className="py-3 opacity-80" colSpan={2}>Wczytywanie…</td></tr>
+            ) : items.length ? items.map((it, i)=> (
+              <tr key={i} className="border-t" style={{ borderColor: "var(--pv-border)" }}>
+                <td className="py-2 pr-4 capitalize">{it.label}</td>
+                <td className="py-2 text-right">{it.value != null ? it.value.toFixed(2) : "-"}</td>
               </tr>
-            ))}
+            )) : (
+              <tr><td className="py-3 opacity-80" colSpan={2}>Brak danych</td></tr>
+            )}
           </tbody>
         </table>
       </div>
-      {note ? <div className="text-[11px] text-sky-900/60 mt-2">{note}</div> : null}
+      {note ? <div className="mt-2 text-xs opacity-70">{note}</div> : null}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import "./globals.css";
 import type { Metadata } from "next";
+import "./theme.css";
 
 export const metadata: Metadata = {
   title: process.env.NEXT_PUBLIC_APP_NAME || "FoxESS + RCE Dashboard",

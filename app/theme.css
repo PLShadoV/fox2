@@ -1,0 +1,19 @@
+:root {
+  --pv-bg: #0b1220;
+  --pv-card: rgba(255,255,255,0.06);
+  --pv-border: rgba(255,255,255,0.10);
+  --pv-text: #cbd5e1;
+  --pv-heading: #e2e8f0;
+}
+:root.theme-light {
+  --pv-bg: #f6f9ff;
+  --pv-card: rgba(255,255,255,0.8);
+  --pv-border: rgba(15,23,42,0.08);
+  --pv-text: #0f172a;
+  --pv-heading: #0b1220;
+}
+
+html, body { background: var(--pv-bg); color: var(--pv-text); }
+.pv-card { background: var(--pv-card); border: 1px solid var(--pv-border); border-radius: 1rem; }
+.pv-title { color: var(--pv-heading); }
+.glass-focus:focus { outline: 2px solid rgba(14,165,233,0.35); outline-offset: 2px; border-radius: 1rem; }
