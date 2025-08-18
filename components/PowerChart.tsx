@@ -1,47 +1,36 @@
-"use client";
+'use client';
+import React from 'react';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
-import React from "react";
-import {
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-} from "recharts";
+export type Point = { t: string; kw: number };
 
-type Point = { t: string; kw: number };
+function formatTime(t: string){
+  // Expect HH:MM or HH:MM:SS -> show HH:MM
+  if (!t) return '';
+  const parts = t.split(':');
+  return parts[0].padStart(2,'0') + ':' + parts[1].padStart(2,'0');
+}
 
-export default function PowerChart({ points, title }: { points: Point[]; title: string }) {
+export default function PowerChart({ data, title }:{ data: Point[]; title: string }){
   return (
-    <div className="glass-panel rounded-2xl p-4">
-      <div className="text-sm opacity-80 mb-2">{title}</div>
-      <div style={{ width: "100%", height: 340 }}>
-        <ResponsiveContainer>
-          <AreaChart data={points}>
+    <div className="pv-panel">
+      <h4>{title}</h4>
+      <div className="pv-chart">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data}>
             <defs>
               <linearGradient id="pvGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="var(--pv-accent)" stopOpacity={0.7} />
-                <stop offset="100%" stopColor="var(--pv-accent)" stopOpacity={0.05} />
+                <stop offset="0%" stopColor="#22b7f7" stopOpacity={0.6}/>
+                <stop offset="100%" stopColor="#22b7f7" stopOpacity={0.05}/>
               </linearGradient>
             </defs>
-            <CartesianGrid strokeOpacity={0.15} vertical={false} />
-            <XAxis dataKey="t" tick={{ fontSize: 12 }} minTickGap={32} />
-            <YAxis width={38} tick={{ fontSize: 12 }} />
-            <Tooltip
-              formatter={(v: any) => [`${Number(v).toFixed(2)} kW`, "Moc"]}
-              labelFormatter={(l) => `${l}`}
+            <CartesianGrid stroke="rgba(255,255,255,.08)" vertical={false} />
+            <XAxis dataKey="t" tickFormatter={formatTime} tick={{ fill: '#a9bfd8' }} />
+            <YAxis tick={{ fill: '#a9bfd8' }} width={40}/>
+            <Tooltip formatter={(v:any)=>[v+' kW','moc']} labelFormatter={formatTime}
+              contentStyle={{ background: 'rgba(10,20,36,.95)', border: '1px solid rgba(255,255,255,.1)', borderRadius: 10, color: '#dbe7f5' }}
             />
-            <Area
-              type="monotone"
-              dataKey="kw"
-              stroke="var(--pv-accent)"
-              fill="url(#pvGrad)"
-              strokeWidth={2.5}
-              dot={false}
-              isAnimationActive={false}
-            />
+            <Area dataKey="kw" type="monotone" stroke="#22b7f7" fill="url(#pvGrad)" strokeWidth={3} dot={false} />
           </AreaChart>
         </ResponsiveContainer>
       </div>
