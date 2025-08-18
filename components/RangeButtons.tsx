@@ -1,48 +1,65 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useMemo } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
-function toISO(d: Date){
-  return d.toISOString().slice(0,10);
+type Props = {
+  chipClass?: string;
+  activeClass?: string;
+};
+
+function toISODateLocal(d: Date) {
+  const z = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+  return z.toISOString().slice(0, 10);
 }
 
-export default function RangeButtons(){
+export default function RangeButtons({ chipClass = "", activeClass = "" }: Props) {
   const router = useRouter();
+  const pathname = usePathname();
   const sp = useSearchParams();
-  const [date, setDate] = useState(sp.get("date") || toISO(new Date()));
 
-  useEffect(()=>{
-    const cur = sp.get("date") || toISO(new Date());
-    setDate(cur);
-  }, [sp]);
+  const today = useMemo(() => toISODateLocal(new Date()), []);
+  const yesterday = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return toISODateLocal(d);
+  }, []);
 
-  const go = (d: string)=> {
-    const url = new URL(window.location.href);
-    url.searchParams.set("date", d);
-    router.push(url.pathname + "?" + url.searchParams.toString());
-  };
+  const dateParam = sp.get("date") || today;
+  const isToday = dateParam === today;
+  const isYesterday = dateParam === yesterday;
 
-  const today = ()=> go(toISO(new Date()));
-  const yesterday = ()=> {
-    const dt = new Date();
-    dt.setDate(dt.getDate()-1);
-    go(toISO(dt));
-  };
+  function pushWithDate(dateStr: string) {
+    const search = new URLSearchParams(sp.toString());
+    search.set("date", dateStr);
+    router.replace(`${pathname}?${search.toString()}`, { scroll: false });
+  }
 
   return (
     <div className="flex items-center gap-2">
-      <button onClick={today} className="px-4 py-2 rounded-2xl bg-white/60 border border-white/30 backdrop-blur-xl shadow-sm hover:bg-white/70 transition glass-focus">
+      <button
+        type="button"
+        className={`${chipClass} ${isToday ? activeClass : ""}`.trim()}
+        onClick={() => pushWithDate(today)}
+      >
         Dziś
       </button>
-      <button onClick={yesterday} className="px-4 py-2 rounded-2xl bg-white/60 border border-white/30 backdrop-blur-xl shadow-sm hover:bg-white/70 transition glass-focus">
+      <button
+        type="button"
+        className={`${chipClass} ${isYesterday ? activeClass : ""}`.trim()}
+        onClick={() => pushWithDate(yesterday)}
+      >
         Wczoraj
       </button>
+
       <input
         type="date"
-        value={date}
-        onChange={(e)=> { setDate(e.target.value); go(e.target.value); }}
-        className="px-3 py-2 rounded-2xl bg-white/60 border border-white/30 backdrop-blur-xl shadow-sm glass-focus"
+        value={dateParam}
+        onChange={(e) => {
+          const v = e.currentTarget.value || today;
+          pushWithDate(v);
+        }}
+        className={(chipClass + " glass-focus").trim()}
       />
     </div>
   );
