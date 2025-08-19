@@ -1,17 +1,15 @@
-import "./globals.css";
-import type { Metadata } from "next";
-import "./theme.css";
+import './globals.css';
 
-export const metadata: Metadata = {
-  title: process.env.NEXT_PUBLIC_APP_NAME || "FoxESS + RCE Dashboard",
-  description: "PV eksport & ceny RCE – zarobek, wykresy, tabela",
+export const metadata = {
+  title: 'FoxESS × RCE — Dashboard',
+  description: 'Przychody z net-billingu (FoxESS + RCE/RCEm)'
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pl">
       <body>
-        <div className="max-w-7xl mx-auto p-4 md:p-6">{children}</div>
+        <div className="container">{children}</div>
       </body>
     </html>
   );

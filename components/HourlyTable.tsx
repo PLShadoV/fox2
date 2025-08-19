@@ -1,43 +1,40 @@
-'use client';
-import React from 'react';
+type Row = { hour: string; kwh: number; price?: number|null; revenue?: number|null };
 
-export type HourRow = { hour: number; kwh: number; price_pln_mwh: number; revenue_pln: number };
+export default function HourlyTable({ rows, date, priceLabel }:{ rows: Row[]; date: string; priceLabel: string }){
+  const totalKWh = rows.reduce((a,b)=>a+(b.kwh||0),0);
+  const totalRevenue = rows.reduce((a,b)=>a+(b.revenue||0),0);
 
-export default function HourlyTable({ rows, date, modeLabel }:{ rows: HourRow[]; date: string; modeLabel: string }){
-  const totals = rows.reduce((acc, r)=>{
-    acc.kwh += r.kwh;
-    acc.revenue += r.revenue_pln;
-    return acc;
-  }, { kwh: 0, revenue: 0 });
   return (
-    <div className="pv-panel">
-      <h4>Tablica godzinowa — {date}</h4>
+    <div className="glass" style={{overflow:'hidden'}}>
+      <div className="chart-wrap" style={{paddingBottom:0}}>
+        <div style={{fontWeight:700, marginBottom:8}}>Tabela godzinowa — {date}</div>
+      </div>
       <div style={{overflowX:'auto'}}>
-        <table className="pv-table">
+        <table className="table">
           <thead>
             <tr>
-              <th style={{minWidth:80}}>Godzina</th>
+              <th>Godzina</th>
               <th>Generacja (kWh)</th>
-              <th>Cena ({modeLabel}) [PLN/MWh]</th>
+              <th>{priceLabel}</th>
               <th>Przychód (PLN)</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map(r=>(
-              <tr key={r.hour}>
-                <td>{String(r.hour).padStart(2,'0')}:00</td>
+            {rows.map((r,i)=>(
+              <tr key={i}>
+                <td className="kbd">{r.hour}</td>
                 <td>{r.kwh.toFixed(2)}</td>
-                <td>{r.price_pln_mwh.toFixed(2)}</td>
-                <td>{r.revenue_pln.toFixed(2)}</td>
+                <td>{r.price==null ? '—' : r.price.toFixed(2)}</td>
+                <td>{r.revenue==null ? '—' : r.revenue.toFixed(2)}</td>
               </tr>
             ))}
           </tbody>
           <tfoot>
-            <tr>
+            <tr className="tfoot">
               <td>Suma</td>
-              <td>{totals.kwh.toFixed(2)}</td>
-              <td></td>
-              <td>{totals.revenue.toFixed(2)}</td>
+              <td>{totalKWh.toFixed(2)}</td>
+              <td>—</td>
+              <td>{totalRevenue.toFixed(2)}</td>
             </tr>
           </tfoot>
         </table>

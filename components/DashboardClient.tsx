@@ -1,179 +1,163 @@
 'use client';
-import React, { useEffect, useMemo, useState } from 'react';
-import StatTile from '@/components/StatTile';
-import PowerChart, { Point } from '@/components/PowerChart';
-import HourlyTable, { HourRow } from '@/components/HourlyTable';
-import RangeCalculator from '@/components/RangeCalculator';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import StatTile from './StatTile';
+import PowerChart, { HourPoint } from './PowerChart';
+import HourlyTable from './HourlyTable';
+import RangeCalculator from './RangeCalculator';
+import ThemeToggle from './ThemeToggle';
+import { fmtHour } from '@/lib/date';
+import { rcemFor, rcemTable } from '@/lib/rcem';
 
-type Mode = 'rce'|'rcem';
+type RCEHour = { timeISO: string; rce_pln_mwh: number };
 
-function ymd(d: Date){ return d.toISOString().slice(0,10); }
+function normalizeHourly(gen: any): number[] {
+  // Accept a variety of shapes and diff if cumulative
+  const arr = gen?.series || gen?.values || gen || [];
+  if (!Array.isArray(arr)) return new Array(24).fill(0);
+  const nums = arr.map((x:any)=> Number(x) || 0);
+  // Heuristic: if final value > sum of diffs, assume it's cumulative -> diff
+  const diffs:number[] = [];
+  let prev = 0;
+  for(let i=0;i<nums.length;i++){ diffs.push(Math.max(0, +(nums[i]-prev).toFixed(3))); prev = nums[i]; }
+  const sumNums = nums.reduce((a,b)=>a+b,0);
+  const sumDiffs = diffs.reduce((a,b)=>a+b,0);
+  return (sumNums>sumDiffs*1.8) ? diffs.slice(0,24) : nums.slice(0,24);
+}
 
-export default function DashboardClient({ initialDate }:{ initialDate: string }){
-  const [date, setDate] = useState(initialDate);
-  const [mode, setMode] = useState<Mode>('rce');
-  const [pvNowW, setPvNowW] = useState<number|null>(null);
-  const [genSeries, setGenSeries] = useState<number[]>([]);
-  const [genTotal, setGenTotal] = useState<number>(0);
-  const [rows, setRows] = useState<HourRow[]>([]);
-  const [revenueDay, setRevenueDay] = useState<number|null>(null);
-  const [chart, setChart] = useState<Point[]>([]);
+export default function DashboardClient(){
+  const [date, setDate] = useState<string>(new Date().toISOString().slice(0,10));
+  const [mode, setMode] = useState<'rce'|'rcem'>('rce');
+  const [pvNow, setPvNow] = useState<number|null>(null);
+  const [genSeries, setGenSeries] = useState<number[]>(new Array(24).fill(0));
+  const [rce, setRce] = useState<RCEHour[]|null>(null);
+  const [err, setErr] = useState<string|null>(null);
+  const [loading, setLoading] = useState(false);
+  const lastRealtimeFetch = useRef<number>(0);
 
-  // Realtime (60 s)
+  // fetch realtime every 60s, but always show even when browsing other date
   useEffect(()=>{
     let stop = false;
-    async function load(){
+    async function tick(){
+      if (stop) return;
+      const now = Date.now();
+      if (now - lastRealtimeFetch.current < 60000) return;
+      lastRealtimeFetch.current = now;
       try{
-        const r = await fetch('/api/foxess/realtime', { cache:'no-store' });
-        const j = await r.json();
-        if(!stop) setPvNowW(j?.pvNowW ?? null);
+        const r = await fetch('/api/foxess/realtime');
+        if(r.ok){
+          const j = await r.json();
+          const w = j?.pvNowW ?? j?.pvNow ?? j?.watt ?? null;
+          if(typeof w === 'number') setPvNow(w);
+        }
       }catch{}
     }
-    load();
-    const id = setInterval(load, 60000);
-    return ()=>{ stop = true; clearInterval(id); }
+    tick();
+    const id = setInterval(tick, 6000);
+    return ()=>{ stop=true; clearInterval(id); };
   }, []);
 
-  // Day foxess
-  useEffect(()=>{
-    let stop=false;
-    async function loadDay(){
-      try{
-        const r = await fetch(`/api/foxess/day?date=${date}`, { cache:'no-store' });
-        const j = await r.json();
-        if(!j || !j.ok){ setGenSeries([]); setGenTotal(0); return; }
-        const g = j.today?.generation || j.generation || j.today?.gen || null;
-        let series:number[]=[]; let total=0;
-        if(g){
-          if(Array.isArray(g.series)) series = g.series;
-          else if(Array.isArray(g.values)) series = g.values;
-          total = typeof g.total==='number' ? g.total : series.reduce((a:number,v:number)=>a+(Number(v)||0),0);
-        }
-        if(!stop){
-          setGenSeries(series);
-          setGenTotal(total);
-        }
-      }catch{
-        setGenSeries([]); setGenTotal(0);
-      }
-    }
-    loadDay();
-    // prices for RCE hours
-    async function loadRCE(){
-      try{
-        const r = await fetch(`/api/rce/day?date=${date}`, { cache:'no-store' });
-        const j = await r.json();
-        if(j && j.ok && Array.isArray(j.rows)){
-          const rows: HourRow[] = (j.rows as any[]).map((row:any, i:number)=>({
-            hour: row.hour ?? i,
-            kwh: Number(genSeries[i]||0),
-            price_pln_mwh: Number(row.rce_pln_mwh ?? row.price_pln_mwh ?? 0),
-            revenue_pln: Math.max(0, Number(row.rce_pln_mwh ?? row.price_pln_mwh ?? 0)) * Number(genSeries[i]||0) / 1000
-          }));
-          setRows(rows);
-        } else {
-          // fallback to RCEm constant price
-          const r2 = await fetch('/api/rcem/month');
-          const m = await r2.json();
-          const mk = date.slice(0,7);
-          const price = (m?.months?.[mk] || 0);
-          const rows: HourRow[] = [...Array(24)].map((_,i)=>({
-            hour:i,
-            kwh: Number(genSeries[i]||0),
-            price_pln_mwh: price,
-            revenue_pln: price * Number(genSeries[i]||0) / 1000
-          }));
-          setRows(rows);
-        }
-      }catch{
-        setRows([]);
-      }
-    }
-    loadRCE();
-    // Chart
-    async function loadChart(){
-      try{
-        const r = await fetch(`/api/foxess/power?date=${date}`, { cache:'no-store' });
-        const j = await r.json();
-        if(j && j.ok && Array.isArray(j.points)){
-          setChart((j.points as any[]).map((p:any)=>({ t: (p.time||p.t), kw: Number(p.kw ?? p.value ?? 0) })));
-          return;
-        }
-      }catch {}
-      // fallback from hourly kWh -> pseudo kW sample at xx:30
-      const points: Point[] = [...Array(24)].map((_,i)=>({ t: String(i).padStart(2,'0')+':30', kw: Number(genSeries[i]||0) }));
-      setChart(points);
-    }
-    loadChart();
+  async function loadDay(d:string){
+    setErr(null); setLoading(true);
+    try{
+      // FoxESS day (expects existing endpoint in your project)
+      const fr = await fetch(`/api/foxess/day?date=${encodeURIComponent(d)}`);
+      const fj = await fr.json();
+      if(!fr.ok || fj.ok===false) throw new Error(fj.error || 'FoxESS day error');
+      const hourly = normalizeHourly(fj?.today?.generation || fj?.generation || fj?.result?.[0]);
+      while(hourly.length<24) hourly.push(0);
+      setGenSeries(hourly.slice(0,24));
 
-    return ()=>{ stop = true; };
-  }, [date, /* recalc when genSeries length changes */ genSeries.length]);
+      // RCE hourly if available
+      const rr = await fetch(`/api/rce/day?date=${encodeURIComponent(d)}`);
+      if(rr.ok){
+        const rj = await rr.json();
+        const rows = rj?.rows || rj?.data || rj;
+        const mapped:RCEHour[] = Array.isArray(rows) ? rows.map((x:any,i:number)=> ({
+          timeISO: x.timeISO || new Date(`${d}T${String(i).padStart(2,'0')}:00:00Z`).toISOString(),
+          rce_pln_mwh: Number(x.rce_pln_mwh ?? x.price_pln_mwh ?? 0)
+        })) : null;
+        setRce(mapped);
+      }else setRce(null);
+    }catch(e:any){
+      setErr(e.message);
+    }finally{ setLoading(false); }
+  }
 
-  // Compute day revenue
-  useEffect(()=>{
-    async function compute(){
-      if(mode==='rcem'){
-        const r = await fetch('/api/rcem/month');
-        const m = await r.json();
-        const mk = date.slice(0,7);
-        const price = (m?.months?.[mk] || 0);
-        setRevenueDay(Number((genTotal * price / 1000).toFixed(2)));
-      } else {
-        try{
-          const r = await fetch(`/api/rce/day?date=${date}`, { cache:'no-store' });
-          const j = await r.json();
-          if(j && j.ok && Array.isArray(j.rows)){
-            let sum = 0;
-            for(let i=0;i<24;i++){
-              const kwh = Number(genSeries[i]||0);
-              const price = Number(j.rows[i]?.rce_pln_mwh ?? j.rows[i]?.price_pln_mwh ?? 0);
-              sum += Math.max(0, price) * kwh / 1000;
-            }
-            setRevenueDay(Number(sum.toFixed(2)));
-          } else {
-            setRevenueDay(null);
-          }
-        }catch{ setRevenueDay(null); }
-      }
-    }
-    compute();
-  }, [mode, date, genSeries, genTotal]);
+  useEffect(()=>{ loadDay(date); }, [date]);
 
-  const toolbar = (
-    <div className="pv-toolbar">
-      <a className="pv-chip" href="https://www.foxesscloud.com" target="_blank">FoxESS</a>
-      <a className="pv-chip" href="https://raporty.pse.pl/report/rce-pln" target="_blank">RCE (PSE)</a>
-      <button className="pv-chip" onClick={()=>{
-        // simple theme toggle: swap bg var
-        const isLight = document.body.dataset.theme === 'light';
-        document.body.dataset.theme = isLight ? 'dark' : 'light';
-      }}>Jasny</button>
-      <button className="pv-chip pv-chip--active" onClick={()=>setDate(ymd(new Date()))}>Dziś</button>
-      <button className="pv-chip" onClick={()=>setDate(ymd(new Date(Date.now()-86400*1000)))}>Wczoraj</button>
-      <input className="pv-input" type="date" value={date} onChange={e=>setDate(e.target.value)} />
-    </div>
-  );
+  const chartData:HourPoint[] = useMemo(()=> genSeries.map((k,i)=>({t:fmtHour(i), kwh:k})), [genSeries]);
+
+  const rows = useMemo(()=> {
+    const price = mode==='rcem' ? (rcemFor(date) || 0) : 0;
+    return genSeries.map((kwh, i)=>{
+      const p = mode==='rce' ? (rce?.[i]?.rce_pln_mwh ?? null) : price;
+      const used = (p==null ? null : Math.max(0, p));
+      const revenue = used==null ? null : (kwh * used / 1000);
+      return { hour: fmtHour(i), kwh, price: used, revenue };
+    });
+  }, [genSeries, rce, mode, date]);
+
+  const totalKWh = genSeries.reduce((a,b)=>a+b,0);
+  const totalRevenue = rows.reduce((a,b)=> a + (b.revenue||0), 0);
 
   return (
-    <div className="pv-shell">
-      {toolbar}
-      <div className="pv-tiles">
-        <StatTile title="Moc teraz" value={pvNowW!==null ? `${pvNowW} W` : '—'} subtitle="Realtime z inwertera (60 s)" />
-        <StatTile title="Wygenerowano (dzień)" value={`${genTotal.toFixed(1)} kWh`} />
-        <StatTile title="Przychód (dzień)" value={revenueDay!==null ? `${revenueDay.toFixed(2)} PLN` : '—'} subtitle={mode==='rce' ? 'RCE godzinowe' : 'RCEm (średnia mies.)'} />
+    <>
+      <div className="hstack" style={{marginBottom:12, alignItems:'center'}}>
+        <div style={{fontSize:28, fontWeight:800}}>FoxESS × RCE</div>
+        <a className="chip link" href="https://www.foxesscloud.com/" target="_blank">FoxESS</a>
+        <a className="chip link" href="https://raporty.pse.pl/report/rce-pln" target="_blank">RCE (PSE)</a>
+        <div className="spacer" />
+        <ThemeToggle />
+        <button className="chip" onClick={()=>setDate(new Date().toISOString().slice(0,10))}>Dziś</button>
+        <button className="chip" onClick={()=>{
+          const d=new Date(date+'T00:00:00'); d.setDate(d.getDate()-1); setDate(d.toISOString().slice(0,10));
+        }}>Wczoraj</button>
+        <input className="chip" type="date" value={date} onChange={e=>setDate(e.target.value)} />
       </div>
 
-      <div className="pv-toolbar" style={{justifyContent:'flex-end'}}>
-        <div>Tryb obliczeń:</div>
-        <button className={"pv-chip "+(mode==='rce'?'pv-chip--active':'')} onClick={()=>setMode('rce')}>RCE</button>
-        <button className={"pv-chip "+(mode==='rcem'?'pv-chip--active':'')} onClick={()=>setMode('rcem')}>RCEm</button>
+      {/* Stat tiles */}
+      <div className="grid-3">
+        <StatTile title="Moc teraz" value={pvNow!=null?`${pvNow} W`:'—'} subtitle="Realtime z inwertera (60 s)" />
+        <StatTile title="Wygenerowano (dzień)" value={`${totalKWh.toFixed(1)} kWh`} />
+        <StatTile title="Przychód (dzień)" value={`${totalRevenue.toFixed(2)} PLN`} subtitle={mode==='rce'?'RCE godzinowe':'RCEm (średnia mies.)'} />
       </div>
 
-      <PowerChart data={chart} title={`Moc [kW] — ${date}`} />
+      <div className="hstack" style={{marginTop:12, marginBottom:12}}>
+        <div style={{color:'var(--muted)'}}>Tryb obliczeń:</div>
+        <button className={'chip '+(mode==='rce'?'active':'')} onClick={()=>setMode('rce')}>RCE</button>
+        <button className={'chip '+(mode==='rcem'?'active':'')} onClick={()=>setMode('rcem')}>RCEm</button>
+        <div className="spacer" />
+        {mode==='rce' && !rce && <div className="notice">Brak danych RCE dla tego dnia — przełącz na RCEm.</div>}
+      </div>
 
-      <HourlyTable rows={rows} date={date} modeLabel={mode.toUpperCase()} />
+      <PowerChart data={chartData} title={`Moc [kW] — ${date}`} />
+
+      <div style={{height:12}} />
+
+      <HourlyTable rows={rows} date={date} priceLabel={mode==='rce'?'Cena RCE (PLN/MWh)':'Cena RCEm (PLN/MWh)'} />
+
+      <div style={{height:12}} />
 
       <RangeCalculator />
-    </div>
+
+      <div style={{height:12}} />
+
+      <div className="glass" style={{padding:16}}>
+        <div style={{fontWeight:700, marginBottom:8}}>RCEm — miesięczne ceny (PLN/MWh)</div>
+        <table className="table">
+          <thead><tr><th>Miesiąc</th><th>Cena (PLN/MWh)</th></tr></thead>
+          <tbody>
+            {rcemTable().map(row=>(
+              <tr key={row.month}>
+                <td className="kbd">{row.month}</td>
+                <td>{row.price.toFixed(2)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {err && <div className="error" style={{marginTop:12}}>{String(err)}</div>}
+    </>
   );
 }

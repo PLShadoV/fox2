@@ -1,38 +1,29 @@
 'use client';
-import React from 'react';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
-export type Point = { t: string; kw: number };
+export type HourPoint = { t: string; kwh: number };
 
-function formatTime(t: string){
-  // Expect HH:MM or HH:MM:SS -> show HH:MM
-  if (!t) return '';
-  const parts = t.split(':');
-  return parts[0].padStart(2,'0') + ':' + parts[1].padStart(2,'0');
-}
-
-export default function PowerChart({ data, title }:{ data: Point[]; title: string }){
+export default function PowerChart({ data, title }:{ data: HourPoint[]; title: string }){
   return (
-    <div className="pv-panel">
-      <h4>{title}</h4>
-      <div className="pv-chart">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data}>
-            <defs>
-              <linearGradient id="pvGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#22b7f7" stopOpacity={0.6}/>
-                <stop offset="100%" stopColor="#22b7f7" stopOpacity={0.05}/>
-              </linearGradient>
-            </defs>
-            <CartesianGrid stroke="rgba(255,255,255,.08)" vertical={false} />
-            <XAxis dataKey="t" tickFormatter={formatTime} tick={{ fill: '#a9bfd8' }} />
-            <YAxis tick={{ fill: '#a9bfd8' }} width={40}/>
-            <Tooltip formatter={(v:any)=>[v+' kW','moc']} labelFormatter={formatTime}
-              contentStyle={{ background: 'rgba(10,20,36,.95)', border: '1px solid rgba(255,255,255,.1)', borderRadius: 10, color: '#dbe7f5' }}
-            />
-            <Area dataKey="kw" type="monotone" stroke="#22b7f7" fill="url(#pvGrad)" strokeWidth={3} dot={false} />
-          </AreaChart>
-        </ResponsiveContainer>
+    <div className="glass">
+      <div className="chart-wrap">
+        <div style={{fontWeight:700, marginBottom:8}}>{title}</div>
+        <div style={{width:'100%', height:300}}>
+          <ResponsiveContainer>
+            <AreaChart data={data}>
+              <defs>
+                <linearGradient id="pv" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#29a3ff" stopOpacity={0.9} />
+                  <stop offset="100%" stopColor="#29a3ff" stopOpacity={0.05} />
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="t" tick={{fill:'var(--muted)'}} />
+              <YAxis tick={{fill:'var(--muted)'}} />
+              <Tooltip contentStyle={{background:'rgba(0,0,0,0.7)', border:'none', borderRadius:10}} />
+              <Area type="monotone" dataKey="kwh" stroke="#29a3ff" strokeWidth={3} fill="url(#pv)" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
       </div>
     </div>
   );

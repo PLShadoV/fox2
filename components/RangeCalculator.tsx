@@ -1,46 +1,48 @@
 'use client';
-import React, { useState } from 'react';
+import { useState } from 'react';
 
 export default function RangeCalculator(){
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
-  const [mode, setMode] = useState<'rcem'|'rce'>('rcem');
+  const today = new Date().toISOString().slice(0,10);
+  const [from, setFrom] = useState(today.slice(0,8)+'01');
+  const [to, setTo] = useState(today);
+  const [mode, setMode] = useState<'rce'|'rcem'>('rce');
   const [loading, setLoading] = useState(false);
-  const [out, setOut] = useState<{kwh:number, revenue:number}|null>(null);
+  const [res, setRes] = useState<{kwh:number,revenue:number}|null>(null);
+  const [err, setErr] = useState<string|null>(null);
+
   async function compute(){
-    if(!from || !to) return;
-    setLoading(true);
+    setLoading(true); setErr(null);
     try{
-      let url = `/api/rcem/revenue?from=${from}&to=${to}&mode=${mode}`;
-      const res = await fetch(url);
-      const j = await res.json();
-      if(j && j.ok){
-        setOut({ kwh:j.kwh, revenue:j.revenue_pln });
-      } else {
-        setOut({ kwh:0, revenue:0 });
-      }
-    }catch(e){
-      setOut({ kwh:0, revenue:0 });
-    }finally{
-      setLoading(false);
-    }
+      const q = new URLSearchParams({from, to, mode}).toString();
+      const r = await fetch(`/api/range/compute?${q}`);
+      const j = await r.json();
+      if(!r.ok || j.ok===false) throw new Error(j.error || 'Błąd');
+      setRes({kwh:j.sumKWh, revenue:j.sumRevenue});
+    }catch(e:any){ setErr(e.message); } finally{ setLoading(false); }
   }
+
   return (
-    <div className="pv-panel">
-      <h4>Kalkulator zakresu (suma GENERATION i przychodu)</h4>
-      <div className="pv-toolbar" style={{marginBottom:12}}>
+    <div className="glass" style={{padding:16}}>
+      <div style={{fontWeight:700, marginBottom:10}}>Kalkulator zakresu (suma GENERATION i przychodu)</div>
+      <div className="hstack" style={{gap:12}}>
         <div>Od</div>
-        <input className="pv-input" type="date" value={from} onChange={e=>setFrom(e.target.value)} />
+        <input type="date" value={from} onChange={e=>setFrom(e.target.value)} className="chip" />
         <div>Do</div>
-        <input className="pv-input" type="date" value={to} onChange={e=>setTo(e.target.value)} />
+        <input type="date" value={to} onChange={e=>setTo(e.target.value)} className="chip" />
         <div>Tryb</div>
-        <button className={"pv-chip "+(mode==='rce'?'pv-chip--active':'')} onClick={()=>setMode('rce')}>RCE</button>
-        <button className={"pv-chip "+(mode==='rcem'?'pv-chip--active':'')} onClick={()=>setMode('rcem')}>RCEm</button>
-        <button className="pv-btn" disabled={loading || !from || !to} onClick={compute}>{loading?'Liczenie…':'Oblicz'}</button>
+        <div className="hstack">
+          <button className={"chip "+(mode==='rce'?'active':'')} onClick={()=>setMode('rce')}>RCE</button>
+          <button className={"chip "+(mode==='rcem'?'active':'')} onClick={()=>setMode('rcem')}>RCEm</button>
+        </div>
+        <div className="spacer" />
+        <button className="btn" onClick={compute} disabled={loading}>{loading?'Liczenie…':'Oblicz'}</button>
       </div>
-      <div>
-        {out ? <div>Suma GENERATION: <b>{out.kwh.toFixed(2)} kWh</b>, Suma przychodu: <b>{out.revenue.toFixed(2)} PLN</b></div> : <div>Wybierz zakres i tryb obliczeń.</div>}
-      </div>
+      {err && <div className="error" style={{marginTop:12}}>{err}</div>}
+      {res && (
+        <div style={{marginTop:12}}>
+          Suma <b>GENERATION</b>: <b>{res.kwh.toFixed(2)} kWh</b>, Suma przychodu: <b>{res.revenue.toFixed(2)} PLN</b>
+        </div>
+      )}
     </div>
   );
 }
