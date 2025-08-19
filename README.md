@@ -1,31 +1,39 @@
-# FoxESS × RCE — minimalist app
+# Patch: szybki kalkulator + motywy (dark default)
 
-This bundle contains just the **UI**, the **RCEm table** and the **/api/range/compute** endpoint.
+**Co w paczce**
+- `app/api/range/compute/route.ts` – kompletny endpoint liczący sumy GENERATION i przychodu (RCE / RCEm) z timeoutami i walidacją dat.
+- `components/ThemeToggle.tsx` – działający przełącznik jasny/ciemny (domyślnie ciemny).
+- `app/globals.css` – zmienne i klasy (`.pv-card`, `.pv-chip`, `.pv-table`) z poprawionym kontrastem.
 
-It **expects you already have** working endpoints:
+## Instalacja
+1. Skopiuj katalogi z paczki do swojego projektu, zachowując strukturę:
+   - `app/api/range/compute/route.ts`
+   - `components/ThemeToggle.tsx`
+   - `app/globals.css` (jeśli masz własny, dodaj **blok :root** i **klasy .pv-*** na koniec swojego pliku)
+2. Użyj `ThemeToggle` w nagłówku (musi być **client component**):
+   ```tsx
+   import ThemeToggle from "@/components/ThemeToggle";
 
-- `/api/foxess/realtime` → `{ pvNowW: number }` (or compatible)
-- `/api/foxess/day?date=YYYY-MM-DD` → payload with daily generation; the app auto-normalizes shapes.
-- `/api/rce/day?date=YYYY-MM-DD` → hourly RCE prices; optional. If missing, the app will fall back to **RCEm** for revenue.
+   export default function HeaderBar(){
+     return (
+       <div className="flex gap-3 items-center">
+         <a className="pv-chip" href="https://www.foxesscloud.com" target="_blank">FoxESS</a>
+         <a className="pv-chip" href="https://raporty.pse.pl/report/rce-pln" target="_blank">RCE (PSE)</a>
+         <ThemeToggle />
+       </div>
+     );
+   }
+   ```
+3. W kalkulatorze wysyłaj zapytanie tak (obsługuje `YYYY-MM-DD` oraz `DD.MM.YYYY`):
+   ```ts
+   const from = new Date(fromDate).toISOString().slice(0,10);
+   const to   = new Date(toDate).toISOString().slice(0,10);
+   const url  = `/api/range/compute?from=${from}&to=${to}&mode=${mode}`; // mode: rce | rcem
+   const res  = await fetch(url).then(r=>r.json());
+   ```
 
-### What you get
-
-- Glass-morphism tiles (Moc teraz, Wygenerowano, Przychód)
-- Smooth area chart of **hourly generation** (not cumulative)
-- Hourly table (generation, price, revenue)
-- Range calculator that sums kWh and revenue for a date range (RCE or RCEm)
-- Theme toggle (dark default, light optional)
-- RCEm monthly prices baked in `/public/rcem.json`
-
-### Rate limiting to FoxESS
-
-The UI throttles realtime polling to **1 request / 60s** (client side). Your existing `/api/foxess/realtime` can add server-side caching if needed.
-
-### Install
-
-```
-npm i
-npm run dev
-```
-
-Adjust or keep your existing API endpoints; this UI will call them.
+## Notatki
+- Endpoint ogranicza zakres do ~92 dni, żeby nie blokować serwera. Podnieś wartość w `MAX_DAYS`, jeśli koniecznie trzeba.
+- RCEm: najpierw próbuje `/api/rcem?month=YYYY-MM` (jeśli masz), w przeciwnym razie bierze średnią z godzinowych RCE.
+- Ujemne ceny w RCE są widoczne w tabeli, ale **nie są liczone** do przychodu (zgodnie z prośbą).
+- Motyw **domyślnie ciemny** – zapisywany w `localStorage("pv-theme")`.

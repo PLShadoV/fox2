@@ -1,21 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ymd, getDaySeriesKWh } from "@/lib/foxess-day";
 
-export const revalidate = 300;
+export const dynamic = "force-dynamic";
 
-export async function GET(req: NextRequest) {
+type Cache = { ts: number; value: any };
+const TTL = 60 * 1000; // 60s
+const mem: Record<string, Cache> = {};
+
+async function j(url:string){
+  const r = await fetch(url, { cache: "no-store" as any });
+  if (!r.ok) throw new Error(url + " -> " + r.status);
+  return r.json();
+}
+
+export async function GET(req: NextRequest){
   const url = new URL(req.url);
-  const date = ymd(url.searchParams.get("date") || undefined);
+  const date = url.searchParams.get("date") || new Date().toISOString().slice(0,10);
+  const key = `sum:${date}`;
+  const now = Date.now();
+  const hit = mem[key];
+  if (hit && (now - hit.ts) < TTL) return NextResponse.json(hit.value);
 
-  try {
-    const gen = await getDaySeriesKWh(req, date);
-    const today = {
-      date,
-      generation: gen,
-      export: { unit: "kWh", series: new Array(24).fill(0), total: 0, variable: "feedin" }
-    };
-    return NextResponse.json({ ok: true, date, today });
-  } catch (e:any) {
-    return NextResponse.json({ ok: false, error: e?.message || "day-failed", date }, { status: 200 });
-  }
+  const origin = url.origin;
+  const data = await j(`${origin}/api/foxess/summary/day?date=${date}`);
+  mem[key] = { ts: now, value: data };
+  return NextResponse.json(data);
 }
